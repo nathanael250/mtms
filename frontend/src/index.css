@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --page-bg: #f1f5f9;
+  --brand-100: #e9f3ff;
+  --brand-200: #c9e1ff;
+  --brand-300: #a3ccff;
+  --brand-400: #6caeff;
+  --brand-500: #328eff;
+  --brand-600: #2478e3;
+  --brand-700: #1c60bc;
+  --shell-sidebar: #1e2235;
+  --shell-accent: #7c3aed;
+}
+
+html {
+  background: var(--page-bg);
+}
+
+body {
+  margin: 0;
+  font-family: "Avenir Next", "Nunito Sans", "Segoe UI", sans-serif;
+  background: var(--page-bg);
+  color: #0f172a;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input {
+  font: inherit;
+}
