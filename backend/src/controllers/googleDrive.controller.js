@@ -1,4 +1,5 @@
 import { getPool } from "../config/database.js";
+import { env } from "../config/env.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 async function getSettingsRow() {
@@ -13,7 +14,7 @@ export const getGoogleDriveSettings = asyncHandler(async (_req, res) => {
   const settings = await getSettingsRow();
   res.json({
     settings: settings || {
-      connected_email: "movepromotion1@gmail.com",
+      connected_email: env.googleConnectedEmail,
       root_folder_id: "",
       pending_folder_id: "",
       approved_folder_id: "",

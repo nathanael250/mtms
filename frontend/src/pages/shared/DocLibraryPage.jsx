@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
-  Check,
   FileText,
   FileUp,
   Folder,
@@ -84,9 +83,7 @@ export default function DocLibraryPage() {
   const [jobs, setJobs] = useState([]);
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const [activeStatus, setActiveStatus] = useState(
-    isAdmin ? "pending_approval" : "approved"
-  );
+  const [activeStatus, setActiveStatus] = useState("approved");
   const [searchTerm, setSearchTerm] = useState("");
   const [uploadForm, setUploadForm] = useState(initialUploadForm);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -96,9 +93,7 @@ export default function DocLibraryPage() {
 
   useEffect(() => {
     const statusByView = {
-      pending: "pending_approval",
       approved: "approved",
-      rejected: "rejected",
       "my-uploads": "my",
     };
 
@@ -195,7 +190,7 @@ export default function DocLibraryPage() {
 
       setUploadForm(initialUploadForm);
       setIsUploadOpen(false);
-      setSuccess("Document uploaded and sent for admin approval.");
+      setSuccess("Document uploaded successfully.");
       loadPageData();
     } catch (uploadError) {
       setError(uploadError.message);
@@ -204,42 +199,16 @@ export default function DocLibraryPage() {
     }
   }
 
-  async function reviewDocument(documentId, action) {
-    const reviewComment = window.prompt(
-      action === "approve" ? "Approval comment" : "Rejection reason"
-    );
-
-    try {
-      await apiFetch(`/documents/${documentId}/${action}`, {
-        method: "PATCH",
-        token,
-        body: { review_comment: reviewComment || "" },
-      });
-      setSuccess(`Document ${action}d successfully.`);
-      loadPageData();
-    } catch (reviewError) {
-      setError(reviewError.message);
-    }
-  }
-
-  const statusTabs = isAdmin
-    ? [
-        ["all", "All Documents"],
-        ["pending_approval", "Pending"],
-        ["approved", "Approved"],
-        ["rejected", "Rejected"],
-      ]
-    : [
-        ["approved", "Approved Documents"],
-        ["my", "My Uploaded Documents"],
-        ["pending_approval", "Pending"],
-        ["rejected", "Rejected"],
-      ];
+  const statusTabs = [
+    ["approved", "Library Documents"],
+    ["my", "My Uploaded Documents"],
+    ...(isAdmin ? [["all", "All Documents"]] : []),
+  ];
 
   return (
     <DashboardLayout
       title="Doc Library"
-      description="Upload, review, and manage approved job-related documents."
+      description="Upload and manage job-related documents in Google Drive."
     >
       {error ? (
         <div className="mb-5 rounded-[8px] border border-red-200 bg-red-50 p-4 text-sm text-red-600">
@@ -333,7 +302,6 @@ export default function DocLibraryPage() {
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Size</th>
                     <th className="px-4 py-3">Uploaded</th>
-                    {isAdmin ? <th className="px-4 py-3">Action</th> : null}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
@@ -386,42 +354,12 @@ export default function DocLibraryPage() {
                       <td className="whitespace-nowrap px-4 py-4 text-slate-500">
                         {formatDate(document.created_at)}
                       </td>
-                      {isAdmin ? (
-                        <td className="whitespace-nowrap px-4 py-4">
-                          {document.status === "pending_approval" ? (
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  reviewDocument(document.id, "approve")
-                                }
-                                className="rounded-[8px] bg-emerald-50 p-2 text-emerald-700"
-                              >
-                                <Check className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  reviewDocument(document.id, "reject")
-                                }
-                                className="rounded-[8px] bg-rose-50 p-2 text-rose-700"
-                              >
-                                <X className="h-4 w-4" />
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-slate-400">
-                              Reviewed
-                            </span>
-                          )}
-                        </td>
-                      ) : null}
                     </tr>
                   ))}
                   {!visibleDocuments.length ? (
                     <tr>
                       <td
-                        colSpan={isAdmin ? 7 : 6}
+                        colSpan={6}
                         className="px-4 py-10 text-center text-sm text-slate-500"
                       >
                         No documents found in this category.
@@ -480,7 +418,7 @@ export default function DocLibraryPage() {
                   Upload Document
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Uploaded files stay pending until an admin approves them.
+                  Uploaded files are stored directly in the document library.
                 </p>
               </div>
               <button

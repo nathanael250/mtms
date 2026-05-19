@@ -20,5 +20,12 @@ export const env = {
     process.env.DEFAULT_ADMIN_EMAIL || "admin@jobmanagement.local",
   defaultAdminPassword: process.env.DEFAULT_ADMIN_PASSWORD || "Admin12345!",
   uploadsDir: process.env.UPLOADS_DIR || "uploads",
+  googleConnectedEmail:
+    process.env.GOOGLE_CONNECTED_EMAIL || "movepromotion1@gmail.com",
+  googleClientId: process.env.GOOGLE_CLIENT_ID || "",
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+  googleRedirectUri:
+    process.env.GOOGLE_REDIRECT_URI ||
+    "http://localhost:5000/api/settings/google-drive/callback",
+  googleRefreshToken: process.env.GOOGLE_REFRESH_TOKEN || "",
 };
-

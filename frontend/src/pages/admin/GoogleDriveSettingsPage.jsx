@@ -52,7 +52,7 @@ export default function GoogleDriveSettingsPage() {
   return (
     <DashboardLayout
       title="Google Drive Integration"
-      description="Configure the Drive folders used by the document approval workflow."
+      description="Configure the Drive folders used by direct document uploads."
     >
       {error ? (
         <div className="mb-5 rounded-[8px] border border-red-200 bg-red-50 p-4 text-sm text-red-600">
@@ -74,9 +74,7 @@ export default function GoogleDriveSettingsPage() {
             {[
               ["connected_email", "Connected Account Email"],
               ["root_folder_id", "Root Folder ID"],
-              ["pending_folder_id", "Pending Documents Folder ID"],
-              ["approved_folder_id", "Approved Documents Folder ID"],
-              ["rejected_folder_id", "Rejected Documents Folder ID"],
+              ["approved_folder_id", "Documents Folder ID"],
             ].map(([key, label]) => (
               <label key={key} className="block">
                 <span className="mb-2 block text-sm font-medium text-slate-600">
@@ -128,15 +126,12 @@ export default function GoogleDriveSettingsPage() {
           </h2>
           <div className="mt-4 rounded-[8px] bg-slate-950 p-4 font-mono text-xs leading-6 text-slate-100">
             <p>Job Management System/</p>
-            <p>  Pending Documents/</p>
-            <p>    JOB-2026-0001/</p>
-            <p>  Approved Documents/</p>
-            <p>    JOB-2026-0001/</p>
-            <p>      Approval Documents/</p>
-            <p>      Contracts/</p>
-            <p>      Reports/</p>
-            <p>  Rejected Documents/</p>
-            <p>    JOB-2026-0001/</p>
+            <p>  Documents/</p>
+            <p>    Employee Name/</p>
+            <p>      JOB-2026-0001/</p>
+            <p>        Approval Documents/</p>
+            <p>        Contracts/</p>
+            <p>        Reports/</p>
           </div>
         </section>
       </div>

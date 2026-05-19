@@ -2,7 +2,11 @@ import fs from "fs/promises";
 import path from "path";
 import { getPool } from "../config/database.js";
 import { createActivityLog } from "../services/activityLog.service.js";
-import { buildDriveMetadata, getDocumentFolderId } from "../services/googleDrive.service.js";
+import {
+  buildLocalDocumentMetadata,
+  moveDocumentToReviewFolder,
+  uploadDocumentToEmployeeFolder,
+} from "../services/googleDrive.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 
@@ -63,19 +67,28 @@ export const uploadDocument = asyncHandler(async (req, res) => {
   }
 
   const driveSettings = await getDriveSettings();
-  const folderId = getDocumentFolderId(driveSettings, "pending_approval");
-  const driveMetadata = buildDriveMetadata({
-    file: req.file,
-    settings: driveSettings,
-    folderId,
-  });
+  const driveMetadata =
+    driveSettings.status === "connected"
+      ? await uploadDocumentToEmployeeFolder({
+          file: req.file,
+          settings: driveSettings,
+          user: req.user,
+          job,
+          status: "approved",
+          categoryName: category.name,
+        })
+      : buildLocalDocumentMetadata({
+          file: req.file,
+          settings: driveSettings,
+          folderId: driveSettings.approved_folder_id || driveSettings.root_folder_id,
+        });
 
   const [result] = await getPool().query(
     `INSERT INTO documents
      (job_id, category_id, title, description, original_file_name,
       google_drive_file_id, google_drive_file_url, google_drive_folder_id,
       mime_type, file_size, uploaded_by, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_approval')`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved')`,
     [
       job_id,
       category_id,
@@ -95,12 +108,12 @@ export const uploadDocument = asyncHandler(async (req, res) => {
     jobId: Number(job_id),
     userId: req.user.id,
     action: "document_uploaded",
-    description: `${req.user.full_name} uploaded document "${title}" for approval.`,
+    description: `${req.user.full_name} uploaded document "${title}" to the library.`,
   });
 
   const document = await getDocumentOrThrow(result.insertId);
   res.status(201).json({
-    message: "Document uploaded and sent for approval.",
+    message: "Document uploaded successfully.",
     document,
   });
 });
@@ -170,7 +183,12 @@ export const getDocumentById = asyncHandler(async (req, res) => {
 export const approveDocument = asyncHandler(async (req, res) => {
   const document = await getDocumentOrThrow(req.params.id);
   const driveSettings = await getDriveSettings();
-  const folderId = getDocumentFolderId(driveSettings, "approved");
+  const folderId = await moveDocumentToReviewFolder({
+    document,
+    settings: driveSettings,
+    status: "approved",
+    categoryName: document.category_name,
+  });
 
   await getPool().query(
     `UPDATE documents
@@ -193,7 +211,12 @@ export const approveDocument = asyncHandler(async (req, res) => {
 export const rejectDocument = asyncHandler(async (req, res) => {
   const document = await getDocumentOrThrow(req.params.id);
   const driveSettings = await getDriveSettings();
-  const folderId = getDocumentFolderId(driveSettings, "rejected");
+  const folderId = await moveDocumentToReviewFolder({
+    document,
+    settings: driveSettings,
+    status: "rejected",
+    categoryName: document.category_name,
+  });
 
   await getPool().query(
     `UPDATE documents
