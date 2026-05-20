@@ -23,17 +23,33 @@ import {
 export function createApp() {
   const app = express();
 
+  const allowedOrigins = [
+    "http://localhost:5173",
+    "http://management.travoozapp.com",
+    "https://management.mopasltd.com", // ← NEW ONE
+  ];
+
   app.use(
     cors({
-      origin: env.clientUrl,
-    })
+      origin: function (origin, callback) {
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          console.log("Blocked by CORS:", origin);
+          callback(new Error("CORS not allowed for: " + origin));
+        }
+      },
+      credentials: true,
+    }),
   );
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
   app.use(
     `/${env.uploadsDir}`,
-    express.static(path.resolve(process.cwd(), env.uploadsDir))
+    express.static(path.resolve(process.cwd(), env.uploadsDir)),
   );
 
   app.get("/", (_req, res) => {
@@ -68,6 +84,5 @@ export function createApp() {
 
   return app;
 }
-
 
 // this line is help for pushing the data
