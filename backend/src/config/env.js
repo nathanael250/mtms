@@ -28,4 +28,23 @@ export const env = {
     process.env.GOOGLE_REDIRECT_URI ||
     "http://localhost:5000/api/settings/google-drive/callback",
   googleRefreshToken: process.env.GOOGLE_REFRESH_TOKEN || "",
+  emailNotificationsEnabled:
+    process.env.EMAIL_NOTIFICATIONS_ENABLED === "true",
+  smtpHost: process.env.SMTP_HOST || "",
+  smtpPort: Number(process.env.SMTP_PORT || 587),
+  smtpSecure: process.env.SMTP_SECURE === "true",
+  smtpUser: process.env.SMTP_USER || "",
+  smtpPass: process.env.SMTP_PASS || "",
+  smtpFrom:
+    process.env.SMTP_FROM || process.env.SMTP_USER || "MOPAS <no-reply@mopas.local>",
+  whatsappNotificationsEnabled:
+    process.env.WHATSAPP_NOTIFICATIONS_ENABLED === "true",
+  whatsappProvider: process.env.WHATSAPP_PROVIDER || "cloud",
+  whatsappDefaultTo: process.env.WHATSAPP_DEFAULT_TO || "",
+  wawpApiBaseUrl: process.env.WAWP_API_BASE_URL || "https://api.wawp.net",
+  wawpInstanceId: process.env.WAWP_INSTANCE_ID || "",
+  wawpAccessToken: process.env.WAWP_ACCESS_TOKEN || "",
+  whatsappAccessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
+  whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+  whatsappApiVersion: process.env.WHATSAPP_API_VERSION || "v20.0",
 };

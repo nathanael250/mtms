@@ -1,5 +1,6 @@
 import { getPool } from "../config/database.js";
 import { createActivityLog } from "../services/activityLog.service.js";
+import { sendMentionNotifications } from "../services/notification.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 
@@ -43,6 +44,15 @@ export const createMention = asyncHandler(async (req, res) => {
     throw new ApiError(403, "You can only create mentions from your own report.");
   }
 
+  const [taggedUsers] = await getPool().query(
+    "SELECT id, full_name, email, phone FROM users WHERE id = ? LIMIT 1",
+    [mentioned_user_id]
+  );
+
+  if (!taggedUsers.length) {
+    throw new ApiError(404, "Mentioned user not found.");
+  }
+
   const [result] = await getPool().query(
     `INSERT INTO report_mentions (report_id, mentioned_by, mentioned_user_id, message)
      VALUES (?, ?, ?, ?)`,
@@ -55,6 +65,13 @@ export const createMention = asyncHandler(async (req, res) => {
     userId: mentioned_by,
     action: "mention_created",
     description: `${req.user.full_name} mentioned another staff member from task "${reports[0].task_title}".`,
+  });
+
+  await sendMentionNotifications({
+    taggedUser: taggedUsers[0],
+    authorName: req.user.full_name,
+    taskTitle: reports[0].task_title,
+    message,
   });
 
   const mention = await getMentionOrThrow(result.insertId);
