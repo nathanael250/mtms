@@ -118,19 +118,25 @@ function StatCard({ icon: Icon, label, value, detail, tone }) {
   };
 
   return (
-    <div className="rounded-[8px] border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-center gap-4">
+    <div className="rounded-[8px] border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+      <div className="grid gap-3 sm:flex sm:items-center sm:gap-4">
         <div
-          className={`flex h-11 w-11 items-center justify-center rounded-[8px] ${
+          className={`flex h-10 w-10 items-center justify-center rounded-[8px] sm:h-11 sm:w-11 ${
             tones[tone] || tones.blue
           }`}
         >
           <Icon className="h-5 w-5" />
         </div>
-        <div>
-          <p className="text-2xl font-bold text-slate-950">{value}</p>
-          <p className="text-[12px] font-semibold text-slate-900">{label}</p>
-          <p className="mt-1 text-[11px] text-slate-500">{detail}</p>
+        <div className="min-w-0">
+          <p className="text-[26px] font-bold leading-none text-slate-950 sm:text-2xl">
+            {value}
+          </p>
+          <p className="mt-2 text-[12px] font-semibold leading-tight text-slate-900">
+            {label}
+          </p>
+          <p className="mt-1 text-[11px] leading-tight text-slate-500">
+            {detail}
+          </p>
         </div>
       </div>
     </div>
@@ -351,7 +357,7 @@ export default function WorkflowPage() {
         </div>
       </div>
 
-      <div className="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
           icon={BriefcaseBusiness}
           label="Ongoing Projects"

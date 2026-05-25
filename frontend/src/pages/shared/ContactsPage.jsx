@@ -142,8 +142,8 @@ export default function ContactsPage() {
           </div>
         ) : null}
 
-        <section className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-3 border-b border-slate-100 bg-white px-6 py-5 md:flex-row md:items-center md:justify-between">
+        <section className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm md:rounded-[30px]">
+          <div className="flex flex-col gap-3 border-b border-slate-100 bg-white px-4 py-4 md:flex-row md:items-center md:justify-between md:px-6 md:py-5">
             <div className="flex w-full flex-col gap-3 md:flex-row md:items-center">
               <input
                 value={searchTerm}
@@ -169,7 +169,72 @@ export default function ContactsPage() {
             </p>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="divide-y divide-slate-100 md:hidden">
+            {filteredContacts.map((contact) => (
+              <article key={contact.id} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold leading-5 text-slate-900">
+                      {contact.full_name}
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-slate-500">
+                      {contact.category_name}
+                      {contact.custom_category
+                        ? ` • ${contact.custom_category}`
+                        : ""}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-[var(--brand-100)] px-2.5 py-1 text-[10px] font-semibold capitalize text-[var(--brand-700)]">
+                    {contact.category_name}
+                  </span>
+                </div>
+
+                {contact.notes ? (
+                  <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-500">
+                    {contact.notes}
+                  </p>
+                ) : null}
+
+                <div className="mt-4 grid gap-2 rounded-2xl bg-slate-50 p-3 text-xs text-slate-600">
+                  <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                    <span className="font-semibold uppercase tracking-[0.12em] text-slate-400">
+                      Phone
+                    </span>
+                    <span className="truncate">{contact.phone || "No phone"}</span>
+                  </div>
+                  <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                    <span className="font-semibold uppercase tracking-[0.12em] text-slate-400">
+                      Email
+                    </span>
+                    <span className="truncate">{contact.email || "No email"}</span>
+                  </div>
+                  <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                    <span className="font-semibold uppercase tracking-[0.12em] text-slate-400">
+                      Company
+                    </span>
+                    <span className="truncate">
+                      {contact.company_name || "No company"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                    <span className="font-semibold uppercase tracking-[0.12em] text-slate-400">
+                      Address
+                    </span>
+                    <span className="truncate">
+                      {contact.address || "No address"}
+                    </span>
+                  </div>
+                </div>
+              </article>
+            ))}
+            {!filteredContacts.length ? (
+              <p className="px-4 py-10 text-center text-sm text-slate-500">
+                No contacts match your search or filter.
+              </p>
+            ) : null}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="min-w-full border-collapse text-left">
               <thead className="bg-slate-50">
                 <tr>

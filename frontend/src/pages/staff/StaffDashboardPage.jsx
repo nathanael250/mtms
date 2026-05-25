@@ -21,14 +21,16 @@ export default function StaffDashboardPage({ data, error }) {
         </div>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
         {items.map(([label, value]) => (
           <div
             key={label}
-            className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm"
+            className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-6"
           >
-            <p className="text-sm text-slate-500">{label}</p>
-            <p className="mt-4 text-3xl font-bold tracking-tight text-slate-900">
+            <p className="text-[12px] font-semibold leading-tight text-slate-500 sm:text-sm">
+              {label}
+            </p>
+            <p className="mt-3 text-[30px] font-bold leading-none tracking-tight text-slate-900 sm:mt-4 sm:text-3xl">
               {value ?? 0}
             </p>
           </div>
@@ -55,4 +57,3 @@ export default function StaffDashboardPage({ data, error }) {
     </DashboardLayout>
   );
 }
-

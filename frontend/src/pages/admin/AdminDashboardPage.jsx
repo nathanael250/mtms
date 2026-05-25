@@ -33,19 +33,23 @@ function formatDate(value, withTime = false) {
 
 function StatCard({ icon: Icon, label, value, hint, tone }) {
   return (
-    <div className="rounded-[26px] border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
+    <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[26px] sm:p-6">
+      <div className="grid gap-3 sm:grid-cols-[72px_minmax(0,1fr)] sm:items-center sm:gap-4">
         <div
-          className={`flex h-14 w-14 items-center justify-center rounded-full ${tone.bg}`}
+          className={`flex h-11 w-11 items-center justify-center rounded-full sm:h-16 sm:w-16 ${tone.bg}`}
         >
-          <Icon className={`h-6 w-6 ${tone.text}`} />
+          <Icon className={`h-5 w-5 sm:h-7 sm:w-7 ${tone.text}`} />
         </div>
-        <div className="flex-1">
-          <p className="text-sm font-medium text-slate-700">{label}</p>
-          <p className="mt-2 text-[42px] font-bold leading-none tracking-tight text-slate-900">
+        <div className="min-w-0">
+          <p className="text-[12px] font-semibold leading-tight text-slate-700 sm:text-base">
+            {label}
+          </p>
+          <p className="mt-2 text-[30px] font-bold leading-none tracking-tight text-slate-900 sm:text-[42px]">
             {value ?? 0}
           </p>
-          <p className="mt-2 text-sm text-slate-400">{hint}</p>
+          <p className="mt-2 text-[12px] leading-tight text-slate-400 sm:text-base">
+            {hint}
+          </p>
         </div>
       </div>
     </div>
@@ -216,7 +220,7 @@ export default function AdminDashboardPage() {
       ) : null}
 
       <div className="space-y-5">
-        <div className="grid gap-4 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
           <StatCard
             icon={BriefcaseBusiness}
             label="Total Jobs"
@@ -473,4 +477,3 @@ export default function AdminDashboardPage() {
     </DashboardLayout>
   );
 }
-

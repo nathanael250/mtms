@@ -1,4 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
+import { useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -16,6 +17,7 @@ import {
   AlignJustify,
   ChevronDown,
   GitBranch,
+  X,
 } from "lucide-react";
 import mopasLogo from "../assets/mopas_logo.png";
 import { useAuth } from "../context/AuthContext";
@@ -49,31 +51,50 @@ export default function DashboardLayout({ title, description, children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const navigationItems = navigationByRole[user?.role] || navigationByRole.staff;
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const userInitials =
+    user?.full_name
+      ?.split(" ")
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() || "")
+      .join("") || "US";
 
   function handleLogout() {
     logout();
     navigate("/login");
   }
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-[var(--page-bg)] text-slate-900">
-      <aside className="hidden h-screen w-[210px] shrink-0 flex-col bg-[var(--shell-sidebar)] text-white lg:flex">
-        <div className="flex items-center gap-3 border-b border-white/10 px-[18px] py-[18px]">
-          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-[10px] bg-white/5">
+  function toggleNavigation() {
+    setIsMobileSidebarOpen((current) => !current);
+    setIsSidebarCollapsed((current) => !current);
+  }
+
+  function SidebarContent({ collapsed = false, onNavigate }) {
+    return (
+      <>
+        <div
+          className={`flex items-center gap-3 border-b border-white/10 px-[18px] py-[18px] ${
+            collapsed ? "justify-center px-3" : ""
+          }`}
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-white/5">
             <img
               src={mopasLogo}
               alt="Mopas logo"
               className="h-7 w-auto object-contain"
             />
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-[13px] font-bold leading-tight text-slate-100">
-              MOPAS
-            </p>
-            <p className="mt-1 text-[10px] text-slate-400">
-              Task management system
-            </p>
-          </div>
+          {!collapsed ? (
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-bold leading-tight text-slate-100">
+                MOPAS
+              </p>
+              <p className="mt-1 text-[10px] text-slate-400">
+                Task management system
+              </p>
+            </div>
+          ) : null}
         </div>
 
         <nav className="flex-1 overflow-y-auto px-[10px] py-[14px]">
@@ -84,8 +105,12 @@ export default function DashboardLayout({ title, description, children }) {
               <NavLink
                 key={item.to}
                 to={item.to}
+                title={collapsed ? item.label : undefined}
+                onClick={onNavigate}
                 className={({ isActive }) =>
-                  `mb-1 flex items-center gap-[10px] rounded-[10px] px-3 py-[10px] text-[13px] transition ${
+                  `mb-1 flex items-center rounded-[10px] px-3 py-[10px] text-[13px] transition ${
+                    collapsed ? "justify-center gap-0" : "gap-[10px]"
+                  } ${
                     isActive
                       ? "bg-[var(--brand-600)] font-semibold text-white"
                       : "text-slate-400 hover:bg-white/5 hover:text-slate-100"
@@ -93,40 +118,93 @@ export default function DashboardLayout({ title, description, children }) {
                 }
               >
                 <Icon className="h-[15px] w-[15px] shrink-0" />
-                <span>{item.label}</span>
+                {!collapsed ? <span>{item.label}</span> : null}
               </NavLink>
             );
           })}
         </nav>
 
         <div className="border-t border-white/10 p-[10px]">
-          <p className="px-3 pb-1 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">
-            Account
-          </p>
-          <div className="rounded-[12px] bg-white/5 px-3 py-3">
-            <p className="truncate text-[13px] font-semibold text-slate-100">
-              {user?.full_name}
+          {!collapsed ? (
+            <p className="px-3 pb-1 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">
+              Account
             </p>
-            <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-400">
-              {user?.role}
-            </p>
+          ) : null}
+          <div
+            className={`rounded-[12px] bg-white/5 px-3 py-3 ${
+              collapsed ? "flex flex-col items-center" : ""
+            }`}
+          >
+            {collapsed ? (
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[var(--brand-500)] to-[var(--shell-accent)] text-[11px] font-bold text-white">
+                {userInitials}
+              </div>
+            ) : (
+              <>
+                <p className="truncate text-[13px] font-semibold text-slate-100">
+                  {user?.full_name}
+                </p>
+                <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-slate-400">
+                  {user?.role}
+                </p>
+              </>
+            )}
             <button
               type="button"
               onClick={handleLogout}
-              className="mt-3 inline-flex items-center gap-2 rounded-[10px] bg-white/10 px-3 py-2 text-[12px] font-medium text-slate-100 transition hover:bg-white/15"
+              title={collapsed ? "Logout" : undefined}
+              className={`mt-3 inline-flex items-center gap-2 rounded-[10px] bg-white/10 px-3 py-2 text-[12px] font-medium text-slate-100 transition hover:bg-white/15 ${
+                collapsed ? "justify-center px-2" : ""
+              }`}
             >
               <LogOut className="h-3.5 w-3.5" />
-              Logout
+              {!collapsed ? "Logout" : null}
             </button>
           </div>
         </div>
+      </>
+    );
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-[var(--page-bg)] text-slate-900">
+      <aside
+        className={`hidden h-screen shrink-0 flex-col bg-[var(--shell-sidebar)] text-white transition-[width] duration-200 lg:flex ${
+          isSidebarCollapsed ? "w-[76px]" : "w-[210px]"
+        }`}
+      >
+        <SidebarContent collapsed={isSidebarCollapsed} />
       </aside>
+
+      {isMobileSidebarOpen ? (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            type="button"
+            aria-label="Close navigation overlay"
+            onClick={() => setIsMobileSidebarOpen(false)}
+            className="absolute inset-0 bg-slate-950/45"
+          />
+          <aside className="relative z-10 flex h-full w-[280px] max-w-[86vw] flex-col bg-[var(--shell-sidebar)] text-white shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(false)}
+              className="absolute right-3 top-3 rounded-md p-2 text-slate-300 transition hover:bg-white/10 hover:text-white"
+              aria-label="Close navigation"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <SidebarContent onNavigate={() => setIsMobileSidebarOpen(false)} />
+          </aside>
+        </div>
+      ) : null}
 
       <div className="flex h-screen flex-1 flex-col overflow-hidden">
         <header className="flex h-14 items-center gap-4 border-b border-slate-200 bg-white px-5 md:px-7">
           <button
             type="button"
+            onClick={toggleNavigation}
             className="rounded-md p-1 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+            aria-label="Toggle navigation"
           >
             <AlignJustify className="h-[18px] w-[18px]" />
           </button>
@@ -158,11 +236,7 @@ export default function DashboardLayout({ title, description, children }) {
 
             <div className="flex items-center gap-2">
               <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-gradient-to-br from-[var(--brand-500)] to-[var(--shell-accent)] text-[12px] font-bold text-white">
-                {user?.full_name
-                  ?.split(" ")
-                  .slice(0, 2)
-                  .map((part) => part[0]?.toUpperCase() || "")
-                  .join("") || "US"}
+                {userInitials}
               </div>
               <div className="hidden sm:block">
                 <p className="text-[12.5px] font-semibold text-slate-900">
@@ -177,7 +251,7 @@ export default function DashboardLayout({ title, description, children }) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto px-[22px] py-[22px]">
+        <main className="flex-1 overflow-y-auto px-4 py-4 sm:px-[22px] sm:py-[22px]">
           {children}
         </main>
       </div>

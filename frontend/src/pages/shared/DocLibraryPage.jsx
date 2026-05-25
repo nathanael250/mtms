@@ -371,7 +371,7 @@ export default function DocLibraryPage() {
             </div>
           </div>
         ) : (
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
             {categoryFolders
               .filter((category) => {
                 const query = searchTerm.trim().toLowerCase();
@@ -382,20 +382,20 @@ export default function DocLibraryPage() {
                   key={category.id}
                   type="button"
                   onClick={() => setSelectedCategory(category)}
-                  className="group rounded-[8px] border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-[var(--brand-300)] hover:bg-blue-50/40"
+                  className="group rounded-[8px] border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-[var(--brand-300)] hover:bg-blue-50/40 sm:p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-[8px] bg-blue-100 text-[var(--brand-700)] transition group-hover:bg-[var(--brand-600)] group-hover:text-white">
-                      <Folder className="h-7 w-7" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-blue-100 text-[var(--brand-700)] transition group-hover:bg-[var(--brand-600)] group-hover:text-white sm:h-12 sm:w-12">
+                      <Folder className="h-6 w-6 sm:h-7 sm:w-7" />
                     </div>
                     <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-slate-600 shadow-sm">
                       {category.documentCount}
                     </span>
                   </div>
-                  <p className="mt-4 text-sm font-bold text-slate-950">
+                  <p className="mt-3 text-[12px] font-bold leading-tight text-slate-950 sm:mt-4 sm:text-sm">
                     {category.name}
                   </p>
-                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-slate-500 sm:text-xs sm:leading-5">
                     {category.description || "Document category folder"}
                   </p>
                 </button>
