@@ -101,6 +101,7 @@ async function ensureDocumentLibrarySchema() {
       google_drive_folder_id VARCHAR(255),
       mime_type VARCHAR(150),
       file_size BIGINT,
+      expiry_date DATE NULL,
       uploaded_by BIGINT NOT NULL,
       status ENUM('pending_approval', 'approved', 'rejected') DEFAULT 'pending_approval',
       reviewed_by BIGINT NULL,
@@ -128,6 +129,8 @@ async function ensureDocumentLibrarySchema() {
   }
 
   for (const statement of [
+    "ALTER TABLE documents ADD COLUMN expiry_date DATE NULL AFTER file_size",
+    "CREATE INDEX idx_documents_expiry_date ON documents(expiry_date)",
     "CREATE INDEX idx_documents_status ON documents(status)",
     "CREATE INDEX idx_documents_uploaded_by ON documents(uploaded_by)",
     "CREATE INDEX idx_document_categories_status ON document_categories(status)",
@@ -135,7 +138,7 @@ async function ensureDocumentLibrarySchema() {
     try {
       await pool.query(statement);
     } catch (error) {
-      if (error.code !== "ER_DUP_KEYNAME") {
+      if (!["ER_DUP_KEYNAME", "ER_DUP_FIELDNAME"].includes(error.code)) {
         throw error;
       }
     }
@@ -180,6 +183,69 @@ async function seedDefaultDocumentCategories() {
   }
 }
 
+async function ensureDailyTaskSchema() {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS daily_tasks (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      parent_task_id BIGINT NULL,
+      description TEXT NOT NULL,
+      planned_time TIME NULL,
+      is_completed TINYINT(1) DEFAULT 0,
+      completed_at DATETIME NULL,
+      created_date DATE NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT fk_daily_tasks_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE
+    )`
+  );
+
+  for (const statement of [
+    "ALTER TABLE daily_tasks ADD COLUMN parent_task_id BIGINT NULL AFTER user_id",
+    "ALTER TABLE daily_tasks ADD COLUMN planned_time TIME NULL AFTER description",
+  ]) {
+    try {
+      await pool.query(statement);
+    } catch (error) {
+      if (error.code !== "ER_DUP_FIELDNAME") {
+        throw error;
+      }
+    }
+  }
+
+  for (const statement of [
+    "CREATE INDEX idx_daily_tasks_user_date ON daily_tasks(user_id, created_date)",
+    "CREATE INDEX idx_daily_tasks_completed ON daily_tasks(is_completed)",
+    "CREATE INDEX idx_daily_tasks_parent ON daily_tasks(parent_task_id)",
+  ]) {
+    try {
+      await pool.query(statement);
+    } catch (error) {
+      if (error.code !== "ER_DUP_KEYNAME") {
+        throw error;
+      }
+    }
+  }
+}
+
+async function ensureReportTemplateSchema() {
+  for (const statement of [
+    "ALTER TABLE task_daily_reports ADD COLUMN completed_tasks TEXT NULL AFTER activity_done",
+    "ALTER TABLE task_daily_reports ADD COLUMN ongoing_tasks TEXT NULL AFTER completed_tasks",
+    "ALTER TABLE task_daily_reports ADD COLUMN next_tasks TEXT NULL AFTER ongoing_tasks",
+  ]) {
+    try {
+      await pool.query(statement);
+    } catch (error) {
+      if (error.code !== "ER_DUP_FIELDNAME") {
+        throw error;
+      }
+    }
+  }
+}
+
 export async function initializeDatabase() {
   if (env.initDbOnStart) {
     await runSchema();
@@ -200,6 +266,8 @@ export async function initializeDatabase() {
   await pool.query("SELECT 1");
 
   await ensureDocumentLibrarySchema();
+  await ensureDailyTaskSchema();
+  await ensureReportTemplateSchema();
 
   if (env.seedAdminOnStart) {
     await seedDefaultAdmin();

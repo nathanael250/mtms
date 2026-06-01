@@ -11,7 +11,8 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 
 const documentSelect = `
-  SELECT documents.*, jobs.title AS job_title, jobs.job_code,
+  SELECT documents.*, DATE_FORMAT(documents.expiry_date, '%Y-%m-%d') AS expiry_date,
+         jobs.title AS job_title, jobs.job_code,
          categories.name AS category_name,
          uploader.full_name AS uploaded_by_name,
          reviewer.full_name AS reviewed_by_name
@@ -48,7 +49,11 @@ export const uploadDocument = asyncHandler(async (req, res) => {
     throw new ApiError(400, "A file is required.");
   }
 
-  const { job_id, category_id, title, description } = req.body;
+  const { job_id, category_id, title, description, expiry_date } = req.body;
+
+  if (expiry_date && !/^\d{4}-\d{2}-\d{2}$/.test(expiry_date)) {
+    throw new ApiError(400, "Expiry date must use YYYY-MM-DD format.");
+  }
 
   const [[job]] = await getPool().query(
     "SELECT id, title, job_code FROM jobs WHERE id = ? LIMIT 1",
@@ -87,8 +92,8 @@ export const uploadDocument = asyncHandler(async (req, res) => {
     `INSERT INTO documents
      (job_id, category_id, title, description, original_file_name,
       google_drive_file_id, google_drive_file_url, google_drive_folder_id,
-      mime_type, file_size, uploaded_by, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved')`,
+      mime_type, file_size, expiry_date, uploaded_by, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved')`,
     [
       job_id,
       category_id,
@@ -100,6 +105,7 @@ export const uploadDocument = asyncHandler(async (req, res) => {
       driveMetadata.folderId,
       req.file.mimetype,
       req.file.size,
+      expiry_date || null,
       req.user.id,
     ]
   );
@@ -137,6 +143,12 @@ export const listDocuments = asyncHandler(async (req, res) => {
   if (req.query.category_id) {
     filters.push("documents.category_id = ?");
     values.push(req.query.category_id);
+  }
+  if (req.query.expiring_within_days) {
+    filters.push(
+      "documents.expiry_date IS NOT NULL AND documents.expiry_date <= DATE_ADD(CURDATE(), INTERVAL ? DAY)"
+    );
+    values.push(Number(req.query.expiring_within_days));
   }
 
   const whereClause = filters.length ? `WHERE ${filters.join(" AND ")}` : "";

@@ -21,8 +21,26 @@ async function getReportOrThrow(reportId) {
 }
 
 export const createReport = asyncHandler(async (req, res) => {
-  const { task_id, user_id, report_date, activity_done, location, comment } = req.body;
+  const {
+    task_id,
+    user_id,
+    report_date,
+    activity_done,
+    completed_tasks,
+    ongoing_tasks,
+    next_tasks,
+    location,
+    comment,
+  } = req.body;
   const reportUserId = Number(user_id);
+  const completedTasks = completed_tasks || activity_done;
+
+  if (!completedTasks && !ongoing_tasks && !next_tasks) {
+    throw new ApiError(
+      400,
+      "Add at least one report detail: completed tasks, ongoing tasks, or next tasks."
+    );
+  }
 
   const [tasks] = await getPool().query(
     "SELECT id, title, assigned_to, job_id FROM tasks WHERE id = ? LIMIT 1",
@@ -47,9 +65,21 @@ export const createReport = asyncHandler(async (req, res) => {
     await connection.beginTransaction();
 
     const [result] = await connection.query(
-      `INSERT INTO task_daily_reports (task_id, user_id, report_date, activity_done, location, comment)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [task_id, reportUserId, report_date, activity_done, location || null, comment || null]
+      `INSERT INTO task_daily_reports
+       (task_id, user_id, report_date, activity_done, completed_tasks,
+        ongoing_tasks, next_tasks, location, comment)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        task_id,
+        reportUserId,
+        report_date,
+        completedTasks || "No completed tasks provided.",
+        completedTasks || null,
+        ongoing_tasks || null,
+        next_tasks || null,
+        location || null,
+        comment || null,
+      ]
     );
 
     await createActivityLog(
@@ -166,7 +196,15 @@ export const updateReport = asyncHandler(async (req, res) => {
   const updates = [];
   const values = [];
 
-  for (const field of ["report_date", "activity_done", "location", "comment"]) {
+  for (const field of [
+    "report_date",
+    "activity_done",
+    "completed_tasks",
+    "ongoing_tasks",
+    "next_tasks",
+    "location",
+    "comment",
+  ]) {
     if (req.body[field] !== undefined) {
       updates.push(`${field} = ?`);
       values.push(req.body[field] || null);

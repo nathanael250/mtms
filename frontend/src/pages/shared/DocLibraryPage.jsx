@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
+  AlertTriangle,
   FileText,
   FileUp,
   Folder,
@@ -18,6 +19,7 @@ const initialUploadForm = {
   category_id: "",
   title: "",
   description: "",
+  expiry_date: "",
   file: null,
 };
 
@@ -55,6 +57,50 @@ function getDocumentUrl(document) {
   }
 
   return document.google_drive_file_url;
+}
+
+function getExpiryState(value) {
+  if (!value) {
+    return { label: "No expiry", tone: "slate", days: null };
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expiry = new Date(value);
+  expiry.setHours(0, 0, 0, 0);
+  const days = Math.ceil((expiry.getTime() - today.getTime()) / 86400000);
+
+  if (days < 0) {
+    return { label: `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} expired`, tone: "rose", days };
+  }
+  if (days === 0) {
+    return { label: "Expires today", tone: "amber", days };
+  }
+  if (days <= 30) {
+    return { label: `${days} day${days === 1 ? "" : "s"} left`, tone: "amber", days };
+  }
+
+  return { label: formatDate(value), tone: "emerald", days };
+}
+
+function ExpiryBadge({ value }) {
+  const expiry = getExpiryState(value);
+  const classes = {
+    slate: "bg-slate-100 text-slate-600",
+    emerald: "bg-emerald-50 text-emerald-700",
+    amber: "bg-amber-50 text-amber-700",
+    rose: "bg-rose-50 text-rose-700",
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-bold ${
+        classes[expiry.tone]
+      }`}
+    >
+      {expiry.label}
+    </span>
+  );
 }
 
 function StatusBadge({ status }) {
@@ -126,9 +172,13 @@ export default function DocLibraryPage() {
     const query = searchTerm.trim().toLowerCase();
 
     return documents.filter((document) => {
+      const expiry = getExpiryState(document.expiry_date);
       const matchesStatus =
         activeStatus === "all" ||
         (activeStatus === "my" && document.uploaded_by === user?.id) ||
+        (activeStatus === "expiring" &&
+          document.expiry_date &&
+          expiry.days <= 30) ||
         document.status === activeStatus;
       const matchesCategory =
         !selectedCategory || document.category_id === selectedCategory.id;
@@ -149,9 +199,13 @@ export default function DocLibraryPage() {
       categories.map((category) => ({
         ...category,
         documentCount: documents.filter((document) => {
+          const expiry = getExpiryState(document.expiry_date);
           const matchesStatus =
             activeStatus === "all" ||
             (activeStatus === "my" && document.uploaded_by === user?.id) ||
+            (activeStatus === "expiring" &&
+              document.expiry_date &&
+              expiry.days <= 30) ||
             document.status === activeStatus;
           return matchesStatus && document.category_id === category.id;
         }).length,
@@ -166,6 +220,10 @@ export default function DocLibraryPage() {
     }),
     {}
   );
+  const expiringCount = documents.filter((document) => {
+    const expiry = getExpiryState(document.expiry_date);
+    return document.expiry_date && expiry.days <= 30;
+  }).length;
 
   async function handleUpload(event) {
     event.preventDefault();
@@ -180,6 +238,7 @@ export default function DocLibraryPage() {
       formData.append("category_id", uploadForm.category_id);
       formData.append("title", uploadForm.title);
       formData.append("description", uploadForm.description);
+      formData.append("expiry_date", uploadForm.expiry_date);
       formData.append("file", uploadForm.file);
 
       await apiFetch("/documents/upload", {
@@ -201,6 +260,7 @@ export default function DocLibraryPage() {
 
   const statusTabs = [
     ["approved", "Library Documents"],
+    ["expiring", "Expiring Soon"],
     ["my", "My Uploaded Documents"],
     ...(isAdmin ? [["all", "All Documents"]] : []),
   ];
@@ -272,7 +332,9 @@ export default function DocLibraryPage() {
               }`}
             >
               {label}{" "}
-              {status === "my"
+              {status === "expiring"
+                ? `(${expiringCount})`
+                : status === "my"
                 ? `(${documents.filter((document) => document.uploaded_by === user?.id).length})`
                 : status !== "all"
                   ? `(${statusCounts[status] || 0})`
@@ -300,6 +362,7 @@ export default function DocLibraryPage() {
                     <th className="px-4 py-3">Job</th>
                     <th className="px-4 py-3">Uploaded By</th>
                     <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Expiry</th>
                     <th className="px-4 py-3">Size</th>
                     <th className="px-4 py-3">Uploaded</th>
                   </tr>
@@ -348,6 +411,9 @@ export default function DocLibraryPage() {
                       <td className="px-4 py-4">
                         <StatusBadge status={document.status} />
                       </td>
+                      <td className="whitespace-nowrap px-4 py-4">
+                        <ExpiryBadge value={document.expiry_date} />
+                      </td>
                       <td className="whitespace-nowrap px-4 py-4 text-slate-500">
                         {formatFileSize(document.file_size)}
                       </td>
@@ -359,7 +425,7 @@ export default function DocLibraryPage() {
                   {!visibleDocuments.length ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className="px-4 py-10 text-center text-sm text-slate-500"
                       >
                         No documents found in this category.
@@ -478,6 +544,27 @@ export default function DocLibraryPage() {
                   </select>
                 </label>
               </div>
+
+              <label className="block">
+                <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-600">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  Expiry Date
+                </span>
+                <input
+                  type="date"
+                  value={uploadForm.expiry_date}
+                  onChange={(event) =>
+                    setUploadForm((current) => ({
+                      ...current,
+                      expiry_date: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-[8px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Use this for contracts, permits, approvals, or documents that must be renewed.
+                </p>
+              </label>
 
               <label className="block">
                 <span className="mb-2 block text-sm font-medium text-slate-600">

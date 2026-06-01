@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, CalendarDays, Plus, X } from "lucide-react";
+import { ArrowRight, CalendarDays, Plus, Trash2, X } from "lucide-react";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../lib/api";
@@ -13,10 +13,20 @@ const initialForm = {
   end_date: "",
 };
 
+const emptyTaskAssignment = {
+  title: "",
+  description: "",
+  assigned_to: "",
+  start_date: "",
+  due_date: "",
+};
+
 export default function JobsPage() {
   const { token, user } = useAuth();
   const [jobs, setJobs] = useState([]);
+  const [staff, setStaff] = useState([]);
   const [form, setForm] = useState(initialForm);
+  const [taskAssignments, setTaskAssignments] = useState([emptyTaskAssignment]);
   const [approvalFile, setApprovalFile] = useState(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -32,9 +42,21 @@ export default function JobsPage() {
     }
   }
 
+  async function loadStaff() {
+    try {
+      const data = await apiFetch("/users/staff", { token });
+      setStaff(data.users || []);
+    } catch (loadError) {
+      setError(loadError.message);
+    }
+  }
+
   useEffect(() => {
-    loadJobs();
-  }, []);
+    if (token) {
+      loadJobs();
+      loadStaff();
+    }
+  }, [token]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -55,15 +77,53 @@ export default function JobsPage() {
         formData.append("file", approvalFile);
       }
 
-      await apiFetch("/jobs", {
+      const jobResponse = await apiFetch("/jobs", {
         method: "POST",
         token,
         body: formData,
       });
+
+      const validTaskAssignments = taskAssignments.filter(
+        (task) => task.title.trim() || task.assigned_to || task.due_date
+      );
+
+      for (const task of validTaskAssignments) {
+        if (!task.title.trim() || !task.assigned_to) {
+          throw new Error(
+            "Each task assignment needs a task title and assigned staff member."
+          );
+        }
+      }
+
+      await Promise.all(
+        validTaskAssignments.map((task) =>
+          apiFetch("/tasks", {
+            method: "POST",
+            token,
+            body: {
+              job_id: jobResponse.job.id,
+              title: task.title,
+              description: task.description,
+              assigned_by: user.id,
+              assigned_to: Number(task.assigned_to),
+              start_date: task.start_date || form.start_date || null,
+              due_date: task.due_date || form.end_date || null,
+            },
+          })
+        )
+      );
+
       setForm(initialForm);
+      setTaskAssignments([emptyTaskAssignment]);
       setApprovalFile(null);
       setIsModalOpen(false);
-      setSuccess("Job created successfully.");
+      setSuccess(
+        validTaskAssignments.length
+          ? `Job created and ${validTaskAssignments.length} task${
+              validTaskAssignments.length === 1 ? "" : "s"
+            } assigned successfully.`
+          : "Job created successfully."
+      );
       loadJobs();
     } catch (submitError) {
       setError(submitError.message);
@@ -82,7 +142,28 @@ export default function JobsPage() {
     setIsModalOpen(false);
     setError("");
     setForm(initialForm);
+    setTaskAssignments([emptyTaskAssignment]);
     setApprovalFile(null);
+  }
+
+  function updateTaskAssignment(index, field, value) {
+    setTaskAssignments((current) =>
+      current.map((task, taskIndex) =>
+        taskIndex === index ? { ...task, [field]: value } : task
+      )
+    );
+  }
+
+  function addTaskAssignment() {
+    setTaskAssignments((current) => [...current, { ...emptyTaskAssignment }]);
+  }
+
+  function removeTaskAssignment(index) {
+    setTaskAssignments((current) =>
+      current.length === 1
+        ? [{ ...emptyTaskAssignment }]
+        : current.filter((_, taskIndex) => taskIndex !== index)
+    );
   }
 
   function formatDate(value) {
@@ -299,12 +380,12 @@ export default function JobsPage() {
 
       {isModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[30px] border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[30px] border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">Add Job</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Create a new project and upload its approval document.
+                  Create a new project, then assign its first tasks to staff.
                 </p>
               </div>
               <button
@@ -316,87 +397,246 @@ export default function JobsPage() {
               </button>
             </div>
 
-            <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-              {[
-                ["job_code", "Job Code"],
-                ["title", "Title"],
-              ].map(([key, label]) => (
-                <label key={key} className="block">
-                  <span className="mb-2 block text-sm font-medium text-slate-600">
-                    {label}
-                  </span>
-                  <input
-                    value={form[key]}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        [key]: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[var(--brand-500)] focus:bg-white"
-                  />
-                </label>
-              ))}
+            <form className="mt-6" onSubmit={handleSubmit}>
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-400">
+                      Job Details
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Basic project information and approval document.
+                    </p>
+                  </div>
 
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-600">
-                  Description
-                </span>
-                <textarea
-                  value={form.description}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      description: event.target.value,
-                    }))
-                  }
-                  rows="4"
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[var(--brand-500)] focus:bg-white"
-                />
-              </label>
+                  {[
+                    ["job_code", "Job Code"],
+                    ["title", "Title"],
+                  ].map(([key, label]) => (
+                    <label key={key} className="block">
+                      <span className="mb-2 block text-sm font-medium text-slate-600">
+                        {label}
+                      </span>
+                      <input
+                        value={form[key]}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            [key]: event.target.value,
+                          }))
+                        }
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[var(--brand-500)] focus:bg-white"
+                      />
+                    </label>
+                  ))}
 
-              <div className="grid gap-4 md:grid-cols-2">
-                {[
-                  ["start_date", "Start Date"],
-                  ["end_date", "End Date"],
-                ].map(([key, label]) => (
-                  <label key={key} className="block">
+                  <label className="block">
                     <span className="mb-2 block text-sm font-medium text-slate-600">
-                      {label}
+                      Description
                     </span>
-                    <input
-                      type="date"
-                      value={form[key]}
+                    <textarea
+                      value={form.description}
                       onChange={(event) =>
                         setForm((current) => ({
                           ...current,
-                          [key]: event.target.value,
+                          description: event.target.value,
                         }))
                       }
+                      rows="4"
                       className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[var(--brand-500)] focus:bg-white"
                     />
                   </label>
-                ))}
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {[
+                      ["start_date", "Start Date"],
+                      ["end_date", "End Date"],
+                    ].map(([key, label]) => (
+                      <label key={key} className="block">
+                        <span className="mb-2 block text-sm font-medium text-slate-600">
+                          {label}
+                        </span>
+                        <input
+                          type="date"
+                          value={form[key]}
+                          onChange={(event) =>
+                            setForm((current) => ({
+                              ...current,
+                              [key]: event.target.value,
+                            }))
+                          }
+                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[var(--brand-500)] focus:bg-white"
+                        />
+                      </label>
+                    ))}
+                  </div>
+
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-medium text-slate-600">
+                      Approval Document
+                    </span>
+                    <input
+                      type="file"
+                      onChange={(event) =>
+                        setApprovalFile(event.target.files?.[0] || null)
+                      }
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
+                    />
+                  </label>
+                </div>
+
+                <div className="rounded-[24px] border border-[var(--brand-100)] bg-[var(--brand-50)] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900">
+                        Assign Staff Tasks
+                      </h3>
+                      <p className="mt-1 text-sm leading-6 text-slate-500">
+                        Add tasks that must be done for this job and choose the staff member responsible.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addTaskAssignment}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-[var(--brand-700)] shadow-sm transition hover:bg-[var(--brand-100)]"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Task
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-4">
+                    {taskAssignments.map((task, index) => (
+                      <div
+                        key={index}
+                        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                      >
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-slate-900">
+                            Task {index + 1}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => removeTaskAssignment(index)}
+                            className="rounded-xl p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                            aria-label="Remove task assignment"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <div className="grid gap-3">
+                          <label className="block">
+                            <span className="mb-2 block text-sm font-medium text-slate-600">
+                              Task to be done
+                            </span>
+                            <input
+                              value={task.title}
+                              onChange={(event) =>
+                                updateTaskAssignment(
+                                  index,
+                                  "title",
+                                  event.target.value
+                                )
+                              }
+                              placeholder="Example: Prepare camera equipment"
+                              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[var(--brand-500)] focus:bg-white"
+                            />
+                          </label>
+
+                          <label className="block">
+                            <span className="mb-2 block text-sm font-medium text-slate-600">
+                              Assign to staff
+                            </span>
+                            <select
+                              value={task.assigned_to}
+                              onChange={(event) =>
+                                updateTaskAssignment(
+                                  index,
+                                  "assigned_to",
+                                  event.target.value
+                                )
+                              }
+                              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[var(--brand-500)] focus:bg-white"
+                            >
+                              <option value="">Select staff member</option>
+                              {staff.map((member) => (
+                                <option key={member.id} value={member.id}>
+                                  {member.full_name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label className="block">
+                            <span className="mb-2 block text-sm font-medium text-slate-600">
+                              Task note
+                            </span>
+                            <textarea
+                              value={task.description}
+                              onChange={(event) =>
+                                updateTaskAssignment(
+                                  index,
+                                  "description",
+                                  event.target.value
+                                )
+                              }
+                              rows="2"
+                              placeholder="Describe what the staff member should do."
+                              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[var(--brand-500)] focus:bg-white"
+                            />
+                          </label>
+
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <label className="block">
+                              <span className="mb-2 block text-sm font-medium text-slate-600">
+                                Start Date
+                              </span>
+                              <input
+                                type="date"
+                                value={task.start_date}
+                                onChange={(event) =>
+                                  updateTaskAssignment(
+                                    index,
+                                    "start_date",
+                                    event.target.value
+                                  )
+                                }
+                                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[var(--brand-500)] focus:bg-white"
+                              />
+                            </label>
+                            <label className="block">
+                              <span className="mb-2 block text-sm font-medium text-slate-600">
+                                Due Date
+                              </span>
+                              <input
+                                type="date"
+                                value={task.due_date}
+                                onChange={(event) =>
+                                  updateTaskAssignment(
+                                    index,
+                                    "due_date",
+                                    event.target.value
+                                  )
+                                }
+                                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[var(--brand-500)] focus:bg-white"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-600">
-                  Approval Document
-                </span>
-                <input
-                  type="file"
-                  onChange={(event) => setApprovalFile(event.target.files?.[0] || null)}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
-                />
-              </label>
-
               {error ? (
-                <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+                <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
                   {error}
                 </div>
               ) : null}
 
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="mt-6 flex justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={closeModal}

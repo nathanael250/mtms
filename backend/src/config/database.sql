@@ -150,6 +150,9 @@ CREATE TABLE task_daily_reports (
 
     report_date DATE NOT NULL,
     activity_done TEXT NOT NULL,
+    completed_tasks TEXT,
+    ongoing_tasks TEXT,
+    next_tasks TEXT,
     location VARCHAR(255),
     comment TEXT,
 
@@ -283,6 +286,7 @@ CREATE TABLE documents (
 
     mime_type VARCHAR(150),
     file_size BIGINT,
+    expiry_date DATE NULL,
 
     uploaded_by BIGINT NOT NULL,
 

@@ -15,6 +15,7 @@ import activityLogRoutes from "./routes/activityLog.routes.js";
 import documentCategoryRoutes from "./routes/documentCategory.routes.js";
 import documentRoutes from "./routes/document.routes.js";
 import googleDriveRoutes from "./routes/googleDrive.routes.js";
+import dailyTaskRoutes from "./routes/dailyTask.routes.js";
 import {
   errorHandler,
   notFoundHandler,
@@ -78,6 +79,7 @@ export function createApp() {
   app.use("/api/document-categories", documentCategoryRoutes);
   app.use("/api/documents", documentRoutes);
   app.use("/api/settings/google-drive", googleDriveRoutes);
+  app.use("/api/daily-tasks", dailyTaskRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

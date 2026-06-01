@@ -71,7 +71,14 @@ export const getStaffDashboard = asyncHandler(async (req, res) => {
   );
 
   const [recentTasks] = await pool.query(
-    `SELECT tasks.*, jobs.title AS job_title
+    `SELECT
+       tasks.id,
+       tasks.title,
+       tasks.description,
+       tasks.status,
+       DATE_FORMAT(tasks.start_date, '%Y-%m-%d') AS start_date,
+       DATE_FORMAT(tasks.due_date, '%Y-%m-%d') AS due_date,
+       jobs.title AS job_title
      FROM tasks
      JOIN jobs ON jobs.id = tasks.job_id
      WHERE tasks.assigned_to = ?
@@ -80,11 +87,46 @@ export const getStaffDashboard = asyncHandler(async (req, res) => {
     [userId]
   );
 
+  const [calendarTasks] = await pool.query(
+    `SELECT *
+     FROM (
+       SELECT
+         tasks.id,
+         tasks.title,
+         tasks.status,
+         DATE_FORMAT(tasks.due_date, '%Y-%m-%d') AS due_date,
+         jobs.title AS job_title,
+         'assigned_task' AS calendar_type
+       FROM tasks
+       JOIN jobs ON jobs.id = tasks.job_id
+       WHERE tasks.assigned_to = ?
+
+       UNION ALL
+
+       SELECT
+         CONCAT('planned-', daily_tasks.id) AS id,
+         daily_tasks.description AS title,
+         CASE
+           WHEN daily_tasks.is_completed = 1 THEN 'completed'
+           ELSE 'assigned'
+         END AS status,
+         DATE_FORMAT(daily_tasks.created_date, '%Y-%m-%d') AS due_date,
+         'Planned task' AS job_title,
+         'planned_task' AS calendar_type
+       FROM daily_tasks
+       WHERE daily_tasks.user_id = ?
+         AND daily_tasks.parent_task_id IS NULL
+     ) AS calendar_items
+     ORDER BY due_date ASC, id DESC`,
+    [userId, userId]
+  );
+
   res.json({
     stats: {
       ...taskStats,
       ...mentionStats,
     },
     recentTasks,
+    calendarTasks,
   });
 });

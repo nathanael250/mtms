@@ -1,5 +1,16 @@
 import { useEffect, useState } from "react";
-import { FileUp, Plus, X } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import {
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  Circle,
+  FileUp,
+  ListChecks,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../lib/api";
@@ -29,6 +40,10 @@ const initialCompletionForm = {
   files: [],
 };
 
+function getDateInputValue(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
 function TaskStatusBadge({ status }) {
   return (
     <span className="rounded-full bg-[var(--brand-100)] px-3 py-1 text-xs font-semibold capitalize text-[var(--brand-700)]">
@@ -51,11 +66,17 @@ function formatDate(value) {
 
 export default function TasksPage() {
   const { token, user } = useAuth();
+  const navigate = useNavigate();
   const isAdmin = user?.role === "admin";
   const [tasks, setTasks] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [staff, setStaff] = useState([]);
   const [reports, setReports] = useState([]);
+  const [plannedTasks, setPlannedTasks] = useState([]);
+  const [plannedTaskTitle, setPlannedTaskTitle] = useState("");
+  const [plannedTaskTime, setPlannedTaskTime] = useState("");
+  const [plannedTodoText, setPlannedTodoText] = useState("");
+  const [plannedDate, setPlannedDate] = useState(getDateInputValue());
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [taskForm, setTaskForm] = useState(initialTaskForm);
   const [reportForm, setReportForm] = useState(initialReportForm);
@@ -67,18 +88,23 @@ export default function TasksPage() {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isReportSubmitting, setIsReportSubmitting] = useState(false);
+  const [isPlannedSubmitting, setIsPlannedSubmitting] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [activeTab, setActiveTab] = useState("assigned");
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) || null;
 
-  async function loadPageData(keepSelected = true, taskType = "assigned") {
+  function goToTaskReport(taskId) {
+    navigate(`/reports?task_id=${taskId}`);
+  }
+
+  async function loadPageData(keepSelected = true) {
     try {
       let taskEndpoint = "/tasks";
       if (isAdmin) {
         taskEndpoint = "/tasks";
       } else {
-        taskEndpoint = `/tasks?assigned_to=${user.id}&task_type=${taskType}`;
+        taskEndpoint = `/tasks?assigned_to=${user.id}`;
       }
       const [taskData, jobData, staffData] = await Promise.all([
         apiFetch(taskEndpoint, { token }),
@@ -116,9 +142,31 @@ export default function TasksPage() {
     }
   }
 
+  async function loadPlannedTasks(date = plannedDate) {
+    if (isAdmin) {
+      setPlannedTasks([]);
+      return;
+    }
+
+    try {
+      const data = await apiFetch(`/daily-tasks?date=${date}`, { token });
+      setPlannedTasks(data.tasks || []);
+    } catch (loadError) {
+      setError(loadError.message);
+    }
+  }
+
   useEffect(() => {
-    loadPageData(false, activeTab);
-  }, [isAdmin, token, user?.id, activeTab]);
+    loadPageData(false);
+  }, [isAdmin, token, user?.id]);
+
+  useEffect(() => {
+    if (activeTab === "planned") {
+      loadPlannedTasks(plannedDate);
+      setSelectedTaskId(null);
+      setReports([]);
+    }
+  }, [activeTab, isAdmin, token, plannedDate]);
 
   useEffect(() => {
     loadReports(selectedTaskId);
@@ -259,6 +307,109 @@ export default function TasksPage() {
     setIsReportSubmitting(false);
   }
 
+  async function createPlannedTask() {
+    const todoItems = plannedTodoText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (!plannedTaskTitle.trim()) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setIsPlannedSubmitting(true);
+
+    try {
+      await apiFetch("/daily-tasks", {
+        method: "POST",
+        token,
+        body: {
+          description: plannedTaskTitle,
+          planned_time: plannedTaskTime,
+          created_date: plannedDate,
+          todo_items: todoItems,
+        },
+      });
+      setPlannedTaskTitle("");
+      setPlannedTaskTime("");
+      setPlannedTodoText("");
+      await loadPlannedTasks(plannedDate);
+    } catch (submitError) {
+      setError(submitError.message);
+    } finally {
+      setIsPlannedSubmitting(false);
+    }
+  }
+
+  function handlePlannedTaskKeyDown(event) {
+    if (event.key !== "Enter" || event.shiftKey) {
+      return;
+    }
+
+    event.preventDefault();
+    createPlannedTask();
+  }
+
+  async function handleTogglePlannedTask(taskId) {
+    setError("");
+    setSuccess("");
+
+    try {
+      const data = await apiFetch(`/daily-tasks/${taskId}/toggle`, {
+        method: "PATCH",
+        token,
+      });
+      setPlannedTasks((current) =>
+        current.map((task) => {
+          if (task.id === taskId) {
+            return {
+              ...task,
+              ...data.task,
+              todo_items: (task.todo_items || []).map((item) => ({
+                ...item,
+                is_completed: data.task.is_completed,
+                completed_at: data.task.completed_at,
+              })),
+            };
+          }
+
+          return {
+            ...task,
+            todo_items: (task.todo_items || []).map((item) =>
+              item.id === taskId ? { ...item, ...data.task } : item
+            ),
+          };
+        })
+      );
+    } catch (toggleError) {
+      setError(toggleError.message);
+    }
+  }
+
+  async function handleDeletePlannedTask(taskId) {
+    setError("");
+    setSuccess("");
+
+    try {
+      await apiFetch(`/daily-tasks/${taskId}`, {
+        method: "DELETE",
+        token,
+      });
+      setPlannedTasks((current) =>
+        current
+          .filter((task) => task.id !== taskId)
+          .map((task) => ({
+            ...task,
+            todo_items: (task.todo_items || []).filter((item) => item.id !== taskId),
+          }))
+      );
+    } catch (deleteError) {
+      setError(deleteError.message);
+    }
+  }
+
   async function handleReportSubmit(event) {
     event.preventDefault();
     if (!selectedTask) {
@@ -383,78 +534,322 @@ export default function TasksPage() {
             </div>
           )}
 
-          <div className="mt-5 overflow-x-auto">
-            <table className="min-w-full border-collapse text-left">
-              <thead className="bg-slate-50">
-                <tr>
-                  {[
-                    "Task",
-                    "Job",
-                    "Assigned To",
-                    "Start Date",
-                    "Due Date",
-                    "Status",
-                  ].map((heading) => (
-                    <th
-                      key={heading}
-                      className="px-4 py-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400"
+          {activeTab === "planned" && !isAdmin ? (
+            <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-[var(--brand-700)] shadow-sm">
+                    <ListChecks className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-950">
+                      Create a daily plan
+                    </h3>
+                    <p className="mt-1 text-sm leading-6 text-slate-600">
+                      Create the planned task, set the time, then list the todo
+                      items inside that task.
+                    </p>
+                  </div>
+                </div>
+
+                <label className="mt-5 block">
+                  <span className="mb-2 block text-sm font-semibold text-slate-700">
+                    Planning date
+                  </span>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      type="date"
+                      value={plannedDate}
+                      onChange={(event) => setPlannedDate(event.target.value)}
+                      className="w-full rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[var(--brand-400)] focus:ring-4 focus:ring-blue-100 sm:flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPlannedDate(getDateInputValue())}
+                      className="rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-[var(--brand-700)] transition hover:bg-blue-50"
                     >
-                      {heading}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {tasks.map((task) => (
-                  <tr
-                    key={task.id}
-                    onClick={() => setSelectedTaskId(task.id)}
-                    className={`cursor-pointer border-t border-slate-100 transition hover:bg-slate-50/80 ${
-                      selectedTaskId === task.id ? "bg-[var(--brand-100)]/35" : ""
-                    }`}
-                  >
-                    <td className="px-4 py-4">
-                      <p className="text-sm font-semibold text-slate-900">
-                        {task.title}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {task.description || "No description provided."}
-                      </p>
-                    </td>
-                    <td className="px-4 py-4 text-sm text-slate-600">
-                      {task.job_title}
-                    </td>
-                    <td className="px-4 py-4 text-sm text-slate-600">
-                      {task.assigned_to_name}
-                    </td>
-                    <td className="px-4 py-4 text-sm text-slate-500">
-                      {formatDate(task.start_date)}
-                    </td>
-                    <td className="px-4 py-4 text-sm text-slate-500">
-                      {formatDate(task.due_date)}
-                    </td>
-                    <td className="px-4 py-4">
-                      <TaskStatusBadge status={task.status} />
-                    </td>
-                  </tr>
-                ))}
-                {!tasks.length ? (
+                      Today
+                    </button>
+                  </div>
+                </label>
+
+                <label className="mt-5 block">
+                  <span className="mb-2 block text-sm font-semibold text-slate-700">
+                    Planned time
+                  </span>
+                  <input
+                    type="time"
+                    value={plannedTaskTime}
+                    onChange={(event) => setPlannedTaskTime(event.target.value)}
+                    className="w-full rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[var(--brand-400)] focus:ring-4 focus:ring-blue-100"
+                  />
+                </label>
+
+                <label className="mt-5 block">
+                  <span className="mb-2 block text-sm font-semibold text-slate-700">
+                    Planned task
+                  </span>
+                  <input
+                    value={plannedTaskTitle}
+                    onChange={(event) => setPlannedTaskTitle(event.target.value)}
+                    onKeyDown={handlePlannedTaskKeyDown}
+                    placeholder="Work on the project report"
+                    className="w-full rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[var(--brand-400)] focus:ring-4 focus:ring-blue-100"
+                  />
+                </label>
+
+                <label className="mt-5 block">
+                  <span className="mb-2 block text-sm font-semibold text-slate-700">
+                    Todo list inside this task
+                  </span>
+                  <textarea
+                    value={plannedTodoText}
+                    onChange={(event) => setPlannedTodoText(event.target.value)}
+                    rows="5"
+                    placeholder={"Collect report data\nWrite introduction\nReview numbers"}
+                    className="w-full rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[var(--brand-400)] focus:ring-4 focus:ring-blue-100"
+                  />
+                  <span className="mt-2 block text-xs text-slate-500">
+                    Put each todo item on a new line.
+                  </span>
+                </label>
+
+                <button
+                  type="button"
+                  onClick={createPlannedTask}
+                  disabled={isPlannedSubmitting || !plannedTaskTitle.trim()}
+                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[var(--brand-700)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--brand-600)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Plus className="h-4 w-4" />
+                  {isPlannedSubmitting ? "Adding..." : "Create planned task"}
+                </button>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-950">
+                      Planned checklist
+                    </h3>
+                    <p className="mt-1 flex items-center gap-2 text-sm text-slate-500">
+                      <CalendarDays className="h-4 w-4" />
+                      {formatDate(plannedDate)}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                    {
+                      plannedTasks.filter(
+                        (task) =>
+                          task.is_completed ||
+                          ((task.todo_items || []).length > 0 &&
+                            (task.todo_items || []).every((item) => item.is_completed))
+                      ).length
+                    } /{" "}
+                    {plannedTasks.length} done
+                  </span>
+                </div>
+
+                <div className="mt-5 space-y-3">
+                  {plannedTasks.map((task) => {
+                    const todoItems = task.todo_items || [];
+                    const isTaskDone =
+                      task.is_completed ||
+                      (todoItems.length > 0 &&
+                        todoItems.every((item) => item.is_completed));
+
+                    return (
+                      <article
+                        key={task.id}
+                        className={`rounded-2xl border p-4 ${
+                          isTaskDone
+                            ? "border-emerald-100 bg-emerald-50"
+                            : "border-slate-100 bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePlannedTask(task.id)}
+                            className={`mt-0.5 transition ${
+                              isTaskDone
+                                ? "text-emerald-600 hover:text-emerald-700"
+                                : "text-slate-400 hover:text-[var(--brand-700)]"
+                            }`}
+                            aria-label="Toggle planned task"
+                          >
+                            {isTaskDone ? (
+                              <CheckCircle2 className="h-5 w-5" />
+                            ) : (
+                              <Circle className="h-5 w-5" />
+                            )}
+                          </button>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p
+                                className={`text-sm font-bold leading-6 ${
+                                  isTaskDone
+                                    ? "text-slate-500 line-through"
+                                    : "text-slate-900"
+                                }`}
+                              >
+                                {task.description}
+                              </p>
+                              {task.planned_time ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
+                                  <Clock3 className="h-3.5 w-3.5" />
+                                  {String(task.planned_time).slice(0, 5)}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {todoItems.length ? (
+                              <div className="mt-3 space-y-2">
+                                {todoItems.map((item) => (
+                                  <div key={item.id} className="flex items-start gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleTogglePlannedTask(item.id)}
+                                      className={`mt-0.5 transition ${
+                                        item.is_completed
+                                          ? "text-emerald-600"
+                                          : "text-slate-400 hover:text-[var(--brand-700)]"
+                                      }`}
+                                      aria-label="Toggle todo item"
+                                    >
+                                      {item.is_completed ? (
+                                        <CheckCircle2 className="h-4 w-4" />
+                                      ) : (
+                                        <Circle className="h-4 w-4" />
+                                      )}
+                                    </button>
+                                    <p
+                                      className={`text-sm leading-6 ${
+                                        item.is_completed
+                                          ? "text-slate-500 line-through"
+                                          : "text-slate-700"
+                                      }`}
+                                    >
+                                      {item.description}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-xs text-slate-500">
+                                No todo items added inside this task.
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePlannedTask(task.id)}
+                            className="rounded-lg p-1 text-slate-400 transition hover:bg-white hover:text-rose-600"
+                            aria-label="Delete planned task"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+
+                  {!plannedTasks.length ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                      No planned tasks for this date.
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-5 overflow-x-auto">
+              <table className="min-w-full border-collapse text-left">
+                <thead className="bg-slate-50">
                   <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-10 text-center text-sm text-slate-500"
-                    >
-                      {isAdmin
-                        ? "No tasks created yet."
-                        : activeTab === "assigned"
-                        ? "You do not have assigned tasks yet."
-                        : "You do not have planned tasks yet."}
-                    </td>
+                    {[
+                      "Task",
+                      "Job",
+                      "Assigned To",
+                      "Start Date",
+                      "Due Date",
+                      "Status",
+                      !isAdmin ? "Action" : null,
+                    ]
+                      .filter(Boolean)
+                      .map((heading) => (
+                      <th
+                        key={heading}
+                        className="px-4 py-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400"
+                      >
+                        {heading}
+                      </th>
+                    ))}
                   </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {tasks.map((task) => (
+                    <tr
+                      key={task.id}
+                      onClick={() => setSelectedTaskId(task.id)}
+                      className={`cursor-pointer border-t border-slate-100 transition hover:bg-slate-50/80 ${
+                        selectedTaskId === task.id ? "bg-[var(--brand-100)]/35" : ""
+                      }`}
+                    >
+                      <td className="px-4 py-4">
+                        <p className="text-sm font-semibold text-slate-900">
+                          {task.title}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {task.description || "No description provided."}
+                        </p>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-slate-600">
+                        {task.job_title}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-slate-600">
+                        {task.assigned_to_name}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-slate-500">
+                        {formatDate(task.start_date)}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-slate-500">
+                        {formatDate(task.due_date)}
+                      </td>
+                      <td className="px-4 py-4">
+                        <TaskStatusBadge status={task.status} />
+                      </td>
+                      {!isAdmin ? (
+                        <td className="px-4 py-4">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              goToTaskReport(task.id);
+                            }}
+                            className="whitespace-nowrap rounded-xl bg-[var(--brand-700)] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[var(--brand-600)]"
+                          >
+                            Report Task
+                          </button>
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))}
+                  {!tasks.length ? (
+                    <tr>
+                      <td
+                        colSpan={isAdmin ? 6 : 7}
+                        className="px-4 py-10 text-center text-sm text-slate-500"
+                      >
+                        {isAdmin
+                          ? "No tasks created yet."
+                          : "You do not have assigned tasks yet."}
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          )}
 
         </section>
       </div>
