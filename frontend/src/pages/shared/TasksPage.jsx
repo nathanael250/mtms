@@ -456,36 +456,6 @@ export default function TasksPage() {
             </table>
           </div>
 
-          {!isAdmin && selectedTask ? (
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4">
-              <h3 className="text-base font-semibold text-slate-900">
-                Daily Reports for {selectedTask.title}
-              </h3>
-              <div className="mt-4 space-y-3">
-                {reports.map((report) => (
-                  <div
-                    key={report.id}
-                    className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
-                  >
-                    <p className="text-sm font-medium text-slate-900">
-                      {report.activity_done}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {report.report_date} • {report.location || "No location"}
-                    </p>
-                    {report.comment ? (
-                      <p className="mt-2 text-sm text-slate-600">{report.comment}</p>
-                    ) : null}
-                  </div>
-                ))}
-                {!reports.length ? (
-                  <p className="text-sm text-slate-500">
-                    No reports submitted for this task yet.
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
         </section>
       </div>
 
