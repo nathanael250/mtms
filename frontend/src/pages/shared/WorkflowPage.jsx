@@ -147,18 +147,30 @@ function ProjectWorkflow({ project, isExpanded, onToggle }) {
   const progress = calculateProgress(project.tasks);
 
   return (
-    <div className="border-b border-slate-100 last:border-b-0">
+    <div
+      className={`border-b border-slate-100 last:border-b-0 ${
+        isExpanded ? "border-l-4 border-l-[var(--brand-600)]" : ""
+      }`}
+    >
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center gap-4 px-4 py-4 text-left transition hover:bg-slate-50"
+        className={`flex w-full items-center gap-4 px-4 py-4 text-left transition ${
+          isExpanded
+            ? "bg-[#dbeafe] ring-1 ring-inset ring-blue-300 hover:bg-[#bfdbfe]"
+            : "hover:bg-slate-50"
+        }`}
       >
         {isExpanded ? (
           <ChevronDown className="h-4 w-4 text-slate-600" />
         ) : (
           <ChevronRight className="h-4 w-4 text-slate-600" />
         )}
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[8px] bg-blue-50 text-blue-700">
+        <div
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[8px] ${
+            isExpanded ? "bg-white text-[var(--brand-700)] shadow-sm" : "bg-blue-50 text-blue-700"
+          }`}
+        >
           <BriefcaseBusiness className="h-6 w-6" />
         </div>
         <div className="min-w-0 flex-1">
@@ -323,9 +335,7 @@ export default function WorkflowPage() {
 
   function toggleProject(projectId) {
     setExpandedProjectIds((current) =>
-      current.includes(projectId)
-        ? current.filter((id) => id !== projectId)
-        : [...current, projectId]
+      current.includes(projectId) ? [] : [projectId]
     );
   }
 

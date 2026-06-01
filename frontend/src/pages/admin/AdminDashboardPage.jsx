@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Activity,
   BriefcaseBusiness,
@@ -117,6 +118,261 @@ function JobProgressRow({ job, progress, taskSummary }) {
         </SmallBadge>
       </div>
     </div>
+  );
+}
+
+function TaskCalendar({ tasks }) {
+  const [selectedDate, setSelectedDate] = useState(null);
+  const today = new Date();
+  const todayKey = today.toISOString().slice(0, 10);
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  const leadingDays = monthStart.getDay();
+  const daysInMonth = monthEnd.getDate();
+  const monthLabel = new Intl.DateTimeFormat("en-GB", {
+    month: "long",
+    year: "numeric",
+  }).format(today);
+  const statusStyles = {
+    assigned: "bg-slate-100 text-slate-700 border-slate-200",
+    ongoing: "bg-blue-50 text-blue-700 border-blue-200",
+    completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    cancelled: "bg-rose-50 text-rose-700 border-rose-200",
+  };
+  const statusDots = {
+    assigned: "bg-slate-400",
+    ongoing: "bg-blue-500",
+    completed: "bg-emerald-500",
+    cancelled: "bg-rose-500",
+  };
+  const dayStyles = {
+    assigned: "border-slate-300 bg-slate-50",
+    ongoing: "border-blue-200 bg-blue-50/70",
+    completed: "border-emerald-200 bg-emerald-50/70",
+    cancelled: "border-rose-200 bg-rose-50/70",
+    mixed: "border-violet-200 bg-violet-50/70",
+  };
+
+  const tasksByDate = tasks.reduce((accumulator, task) => {
+    if (!task.due_date) {
+      return accumulator;
+    }
+
+    const key = new Date(task.due_date).toISOString().slice(0, 10);
+    accumulator[key] = [...(accumulator[key] || []), task];
+    return accumulator;
+  }, {});
+
+  const calendarCells = [
+    ...Array.from({ length: leadingDays }, (_, index) => ({
+      key: `blank-${index}`,
+      day: null,
+      tasks: [],
+    })),
+    ...Array.from({ length: daysInMonth }, (_, index) => {
+      const day = index + 1;
+      const key = new Date(today.getFullYear(), today.getMonth(), day)
+        .toISOString()
+        .slice(0, 10);
+
+      return {
+        key,
+        day,
+        tasks: tasksByDate[key] || [],
+      };
+    }),
+  ];
+
+  function getDayTone(cellTasks) {
+    if (!cellTasks.length) {
+      return "";
+    }
+
+    const statuses = new Set(cellTasks.map((task) => task.status));
+    return statuses.size === 1 ? [...statuses][0] : "mixed";
+  }
+
+  const selectedDateKey = selectedDate;
+  const selectedTasks = tasksByDate[selectedDateKey] || [];
+  const selectedDateLabel = new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(selectedDateKey || todayKey));
+
+  return (
+    <section className="relative rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[18px] font-semibold text-slate-900">
+            Task Calendar
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            See which tasks should be done on each date.
+          </p>
+        </div>
+        <span className="rounded-full bg-[var(--brand-100)] px-3 py-1 text-sm font-semibold text-[var(--brand-700)]">
+          {monthLabel}
+        </span>
+      </div>
+
+      <div className="mt-4 grid grid-cols-7 gap-1.5 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, index) => (
+          <span
+            key={day}
+            className={index === 0 || index === 6 ? "text-rose-400" : ""}
+          >
+            {day}
+          </span>
+        ))}
+      </div>
+
+      <div className="relative mt-2 grid grid-cols-7 gap-1.5">
+        {calendarCells.map((cell) => {
+          const dayTone = getDayTone(cell.tasks);
+
+          return (
+            <button
+              key={cell.key}
+              type="button"
+              onClick={() => cell.day && setSelectedDate(cell.key)}
+              disabled={!cell.day}
+              className={`min-h-[58px] rounded-xl border p-1.5 text-left transition ${
+                cell.day
+                  ? cell.key === selectedDateKey
+                    ? "border-[var(--brand-500)] bg-blue-100 shadow-sm ring-2 ring-blue-100"
+                    : cell.tasks.length
+                      ? `${dayStyles[dayTone]} hover:ring-2 hover:ring-white/80`
+                      : "border-slate-200 bg-slate-50/70 hover:border-[var(--brand-300)] hover:bg-blue-50/50"
+                  : "border-transparent bg-transparent"
+              }`}
+            >
+            {cell.day ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <span
+                    className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${
+                      cell.key === todayKey
+                        ? "bg-[var(--brand-600)] text-white"
+                        : "text-slate-700"
+                    }`}
+                  >
+                    {cell.day}
+                  </span>
+                  {cell.tasks.length ? (
+                    <span className="rounded-full bg-white/90 px-1.5 py-0.5 text-[9px] font-bold text-slate-600 shadow-sm">
+                      {cell.tasks.length}
+                    </span>
+                  ) : null}
+                </div>
+                {cell.tasks.length ? (
+                  <div className="mt-1 flex gap-1">
+                    {Array.from(new Set(cell.tasks.map((task) => task.status)))
+                      .slice(0, 4)
+                      .map((status) => (
+                        <span
+                          key={status}
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            statusDots[status] || statusDots.assigned
+                          }`}
+                        />
+                      ))}
+                  </div>
+                ) : null}
+                <div className="mt-1.5 space-y-1">
+                  {cell.tasks.slice(0, 1).map((task) => (
+                    <div
+                      key={task.id}
+                      className={`truncate rounded-md border px-1.5 py-0.5 text-[9px] font-semibold ${
+                        statusStyles[task.status] || statusStyles.assigned
+                      }`}
+                      title={task.title}
+                    >
+                      {task.title}
+                    </div>
+                  ))}
+                  {cell.tasks.length > 1 ? (
+                    <p className="text-[9px] font-semibold text-slate-400">
+                      +{cell.tasks.length - 1}
+                    </p>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+            </button>
+          );
+        })}
+
+        {selectedDate ? (
+          <div className="absolute left-1/2 top-1/2 z-20 w-[min(520px,calc(100%-16px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  {selectedDateLabel}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {selectedTasks.length} task
+                  {selectedTasks.length === 1 ? "" : "s"} scheduled
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedDate(null)}
+                className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500 transition hover:bg-slate-200"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-3 grid max-h-[220px] gap-2 overflow-y-auto">
+              {selectedTasks.map((task) => (
+                <div key={task.id} className="rounded-xl bg-slate-50 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {task.title}
+                      </p>
+                      <p className="mt-1 truncate text-xs text-slate-500">
+                        {task.job_title}
+                      </p>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold capitalize ${
+                        statusStyles[task.status] || statusStyles.assigned
+                      }`}
+                    >
+                      {task.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {!selectedTasks.length ? (
+                <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">
+                  No tasks on this date.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-3 text-xs text-slate-500">
+        {[
+          ["assigned", "Assigned"],
+          ["ongoing", "Ongoing"],
+          ["completed", "Completed"],
+          ["cancelled", "Cancelled"],
+        ].map(([status, label]) => (
+          <span key={status} className="inline-flex items-center gap-1.5">
+            <span
+              className={`h-2.5 w-2.5 rounded-full ${
+                statusDots[status] || statusDots.assigned
+              }`}
+            />
+            {label}
+          </span>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -252,43 +508,7 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,1fr)]">
-          <section className="rounded-[28px] border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between px-5 py-5">
-              <h2 className="text-[18px] font-semibold text-slate-900">
-                Jobs Overview
-              </h2>
-              <button className="text-sm font-medium text-[var(--brand-700)]">
-                View all jobs
-              </button>
-            </div>
-            <div className="grid border-t border-slate-100 px-5 py-3 text-[12px] font-medium uppercase tracking-[0.14em] text-slate-400 md:grid-cols-[minmax(0,1.8fr)_140px_100px_120px_120px]">
-              <span>Job / Project</span>
-              <span>Progress</span>
-              <span>Tasks</span>
-              <span>End Date</span>
-              <span>Status</span>
-            </div>
-            <div>
-              {view.jobsOverview.map((item) => (
-                <JobProgressRow
-                  key={item.job.id}
-                  job={item.job}
-                  progress={item.progress}
-                  taskSummary={item.taskSummary}
-                />
-              ))}
-              {!view.jobsOverview.length ? (
-                <div className="px-5 py-8 text-sm text-slate-500">
-                  No jobs overview data yet.
-                </div>
-              ) : null}
-            </div>
-            <div className="px-5 py-5 text-center">
-              <button className="text-sm font-medium text-[var(--brand-700)]">
-                View all jobs
-              </button>
-            </div>
-          </section>
+          <TaskCalendar tasks={tasks} />
 
           <div className="space-y-5">
             <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
@@ -296,9 +516,9 @@ export default function AdminDashboardPage() {
                 <h2 className="text-[18px] font-semibold text-slate-900">
                   Jobs Pending Approval
                 </h2>
-                <button className="text-sm font-medium text-[var(--brand-700)]">
+                <Link to="/jobs" className="text-sm font-medium text-[var(--brand-700)]">
                   View all
-                </button>
+                </Link>
               </div>
               <div className="mt-4 space-y-4">
                 {view.pendingApprovals.map((job) => (
@@ -360,9 +580,9 @@ export default function AdminDashboardPage() {
                     {view.unreadMentions.length}
                   </span>
                 </div>
-                <button className="text-sm font-medium text-[var(--brand-700)]">
+                <Link to="/mentions" className="text-sm font-medium text-[var(--brand-700)]">
                   View all
-                </button>
+                </Link>
               </div>
               <div className="mt-4">
                 {view.unreadMentions[0] ? (
@@ -391,9 +611,9 @@ export default function AdminDashboardPage() {
               <h2 className="text-[18px] font-semibold text-slate-900">
                 Recent Reports
               </h2>
-              <button className="text-sm font-medium text-[var(--brand-700)]">
+              <Link to="/reports" className="text-sm font-medium text-[var(--brand-700)]">
                 View all
-              </button>
+              </Link>
             </div>
             <div className="grid border-t border-slate-100 px-5 py-3 text-[12px] font-medium uppercase tracking-[0.14em] text-slate-400 md:grid-cols-[110px_140px_1.1fr_1.4fr_120px]">
               <span>Date</span>
@@ -428,9 +648,9 @@ export default function AdminDashboardPage() {
               <h2 className="text-[18px] font-semibold text-slate-900">
                 Recent Activity
               </h2>
-              <button className="text-sm font-medium text-[var(--brand-700)]">
+              <Link to="/activity-logs" className="text-sm font-medium text-[var(--brand-700)]">
                 View all logs
-              </button>
+              </Link>
             </div>
             <div className="mt-4 space-y-4">
               {(data?.recentActivity || []).slice(0, 4).map((item) => {

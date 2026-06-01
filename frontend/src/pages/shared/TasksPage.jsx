@@ -66,12 +66,18 @@ export default function TasksPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [activeTab, setActiveTab] = useState("assigned");
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) || null;
 
-  async function loadPageData(keepSelected = true) {
+  async function loadPageData(keepSelected = true, taskType = "assigned") {
     try {
-      const taskEndpoint = isAdmin ? "/tasks" : `/tasks?assigned_to=${user.id}`;
+      let taskEndpoint = "/tasks";
+      if (isAdmin) {
+        taskEndpoint = "/tasks";
+      } else {
+        taskEndpoint = `/tasks?assigned_to=${user.id}&task_type=${taskType}`;
+      }
       const [taskData, jobData, staffData] = await Promise.all([
         apiFetch(taskEndpoint, { token }),
         apiFetch("/jobs", { token }),
@@ -109,8 +115,8 @@ export default function TasksPage() {
   }
 
   useEffect(() => {
-    loadPageData(false);
-  }, [isAdmin, token, user?.id]);
+    loadPageData(false, activeTab);
+  }, [isAdmin, token, user?.id, activeTab]);
 
   useEffect(() => {
     loadReports(selectedTaskId);
@@ -504,13 +510,17 @@ export default function TasksPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
-                {isAdmin ? "Task List" : "My Assigned Tasks"}
+                {isAdmin ? "Task List" : "My Tasks"}
               </h2>
               {isAdmin ? (
                 <p className="mt-1 text-sm text-slate-500">
                   Review created tasks and open the form only when you need to add one.
                 </p>
-              ) : null}
+              ) : (
+                <p className="mt-1 text-sm text-slate-500">
+                  Work on assigned tasks or manage your planned tasks.
+                </p>
+              )}
             </div>
             {isAdmin ? (
               <button
@@ -523,6 +533,31 @@ export default function TasksPage() {
               </button>
             ) : null}
           </div>
+
+          {!isAdmin && (
+            <div className="mt-4 flex gap-2 border-b border-slate-200">
+              <button
+                onClick={() => setActiveTab("assigned")}
+                className={`px-4 py-3 text-sm font-medium transition ${
+                  activeTab === "assigned"
+                    ? "border-b-2 border-[var(--brand-600)] text-[var(--brand-600)]"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Assigned Tasks
+              </button>
+              <button
+                onClick={() => setActiveTab("planned")}
+                className={`px-4 py-3 text-sm font-medium transition ${
+                  activeTab === "planned"
+                    ? "border-b-2 border-[var(--brand-600)] text-[var(--brand-600)]"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Planned Tasks
+              </button>
+            </div>
+          )}
 
           <div className="mt-5 overflow-x-auto">
             <table className="min-w-full border-collapse text-left">
@@ -587,7 +622,9 @@ export default function TasksPage() {
                     >
                       {isAdmin
                         ? "No tasks created yet."
-                        : "You do not have assigned tasks yet."}
+                        : activeTab === "assigned"
+                        ? "You do not have assigned tasks yet."
+                        : "You do not have planned tasks yet."}
                     </td>
                   </tr>
                 ) : null}

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import mopasLogo from "../assets/mopas_logo.png";
 import { useAuth } from "../context/AuthContext";
+import { apiFetch } from "../lib/api";
 
 const navigationByRole = {
   admin: [
@@ -48,11 +49,16 @@ const navigationByRole = {
 };
 
 export default function DashboardLayout({ title, description, children }) {
-  const { user, logout } = useAuth();
+  const { token, user, logout } = useAuth();
   const navigate = useNavigate();
   const navigationItems = navigationByRole[user?.role] || navigationByRole.staff;
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [isNotificationMenuOpen, setIsNotificationMenuOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const accountMenuRef = useRef(null);
+  const notificationMenuRef = useRef(null);
   const userInitials =
     user?.full_name
       ?.split(" ")
@@ -64,6 +70,52 @@ export default function DashboardLayout({ title, description, children }) {
     logout();
     navigate("/login");
   }
+
+  useEffect(() => {
+    function handleOutsideClick(event) {
+      if (
+        accountMenuRef.current &&
+        !accountMenuRef.current.contains(event.target)
+      ) {
+        setIsAccountMenuOpen(false);
+      }
+      if (
+        notificationMenuRef.current &&
+        !notificationMenuRef.current.contains(event.target)
+      ) {
+        setIsNotificationMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    async function loadNotifications() {
+      if (!token || !user?.role) {
+        setNotifications([]);
+        return;
+      }
+
+      try {
+        const endpoint =
+          user.role === "admin"
+            ? "/report-mentions"
+            : "/report-mentions/assigned-to-me";
+        const data = await apiFetch(endpoint, { token });
+        setNotifications(data.mentions || []);
+      } catch {
+        setNotifications([]);
+      }
+    }
+
+    loadNotifications();
+  }, [token, user?.role]);
+
+  const unreadNotifications = notifications.filter(
+    (notification) => notification.status === "unread"
+  );
 
   function toggleNavigation() {
     setIsMobileSidebarOpen((current) => !current);
@@ -220,33 +272,168 @@ export default function DashboardLayout({ title, description, children }) {
           </div>
 
           <div className="ml-auto flex items-center gap-4">
-            <div className="relative">
+            <div className="relative" ref={notificationMenuRef}>
               <button
                 type="button"
-                className="rounded-full p-1 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                onClick={() => setIsNotificationMenuOpen((current) => !current)}
+                className="rounded-full p-1 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100"
+                aria-label="Open notifications"
+                aria-haspopup="menu"
+                aria-expanded={isNotificationMenuOpen}
               >
                 <Bell className="h-[19px] w-[19px]" />
               </button>
-              <span className="absolute -right-0.5 -top-0.5 flex h-[17px] w-[17px] items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white">
-                5
-              </span>
+              {unreadNotifications.length ? (
+                <span className="absolute -right-0.5 -top-0.5 flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
+                  {unreadNotifications.length > 9 ? "9+" : unreadNotifications.length}
+                </span>
+              ) : null}
+
+              {isNotificationMenuOpen ? (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full z-40 mt-2 w-[320px] overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-xl"
+                >
+                  <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                    <div>
+                      <p className="text-sm font-bold text-slate-950">
+                        Notifications
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {unreadNotifications.length} unread mention
+                        {unreadNotifications.length === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <NavLink
+                      to="/mentions"
+                      onClick={() => setIsNotificationMenuOpen(false)}
+                      className="text-xs font-semibold text-[var(--brand-700)]"
+                    >
+                      View all
+                    </NavLink>
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto p-2">
+                    {(unreadNotifications.length
+                      ? unreadNotifications
+                      : notifications
+                    )
+                      .slice(0, 5)
+                      .map((notification) => (
+                        <NavLink
+                          key={notification.id}
+                          to="/mentions"
+                          onClick={() => setIsNotificationMenuOpen(false)}
+                          className="block rounded-[10px] px-3 py-3 transition hover:bg-slate-50"
+                        >
+                          <div className="flex items-start gap-3">
+                            <span
+                              className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                                notification.status === "unread"
+                                  ? "bg-rose-500"
+                                  : "bg-slate-300"
+                              }`}
+                            />
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-slate-900">
+                                {notification.mentioned_by_name || "Staff"} mentioned you
+                              </p>
+                              <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                                {notification.message}
+                              </p>
+                            </div>
+                          </div>
+                        </NavLink>
+                      ))}
+                    {!notifications.length ? (
+                      <div className="px-3 py-8 text-center text-sm text-slate-500">
+                        No notifications yet.
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="h-6 w-px bg-slate-200" />
 
-            <div className="flex items-center gap-2">
-              <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-gradient-to-br from-[var(--brand-500)] to-[var(--shell-accent)] text-[12px] font-bold text-white">
-                {userInitials}
-              </div>
-              <div className="hidden sm:block">
-                <p className="text-[12.5px] font-semibold text-slate-900">
-                  {user?.full_name}
-                </p>
-                <p className="text-[10px] text-slate-400">
-                  {user?.role === "admin" ? "Administrator" : "Staff Member"}
-                </p>
-              </div>
-              <ChevronDown className="hidden h-3.5 w-3.5 text-slate-400 sm:block" />
+            <div className="relative" ref={accountMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsAccountMenuOpen((current) => !current)}
+                className="flex items-center gap-2 rounded-[12px] px-2 py-1.5 text-left transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-blue-100"
+                aria-haspopup="menu"
+                aria-expanded={isAccountMenuOpen}
+              >
+                <div className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-gradient-to-br from-[var(--brand-500)] to-[var(--shell-accent)] text-[12px] font-bold text-white">
+                  {userInitials}
+                </div>
+                <div className="hidden sm:block">
+                  <p className="text-[12.5px] font-semibold text-slate-900">
+                    {user?.full_name}
+                  </p>
+                  <p className="text-[10px] text-slate-400">
+                    {user?.role === "admin" ? "Administrator" : "Staff Member"}
+                  </p>
+                </div>
+                <ChevronDown
+                  className={`hidden h-3.5 w-3.5 text-slate-400 transition sm:block ${
+                    isAccountMenuOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              {isAccountMenuOpen ? (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full z-40 mt-2 w-64 overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-xl"
+                >
+                  <div className="border-b border-slate-100 px-4 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-[var(--brand-500)] to-[var(--shell-accent)] text-sm font-bold text-white">
+                        {userInitials}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-slate-950">
+                          {user?.full_name}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {user?.role === "admin" ? "Administrator" : "Staff Member"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-2">
+                    <NavLink
+                      to="/mentions"
+                      onClick={() => setIsAccountMenuOpen(false)}
+                      className="flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
+                    >
+                      <MessageSquareMore className="h-4 w-4 text-slate-400" />
+                      Mentions
+                    </NavLink>
+                    {user?.role === "admin" ? (
+                      <NavLink
+                        to="/settings"
+                        onClick={() => setIsAccountMenuOpen(false)}
+                        className="flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
+                      >
+                        <Settings className="h-4 w-4 text-slate-400" />
+                        Settings
+                      </NavLink>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="flex w-full items-center gap-3 rounded-[10px] px-3 py-2.5 text-left text-sm font-medium text-rose-600 transition hover:bg-rose-50"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </header>

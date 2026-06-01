@@ -120,6 +120,16 @@ export const listTasks = asyncHandler(async (req, res) => {
     conditions.push("tasks.status = ?");
     values.push(req.query.status);
   }
+  if (req.query.task_type) {
+    if (req.query.task_type === "assigned") {
+      conditions.push("tasks.assigned_to = ?");
+      values.push(req.query.assigned_to || req.user.id);
+    } else if (req.query.task_type === "planned") {
+      conditions.push("tasks.assigned_by = ? AND tasks.assigned_to = ?");
+      values.push(req.query.assigned_to || req.user.id);
+      values.push(req.query.assigned_to || req.user.id);
+    }
+  }
 
   const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 

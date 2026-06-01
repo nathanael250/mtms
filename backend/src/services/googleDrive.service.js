@@ -22,6 +22,16 @@ function sanitizeDriveName(value) {
     .trim();
 }
 
+function buildDriveFileName({ fileName, job, categoryName }) {
+  const parts = [
+    sanitizeDriveName(job?.job_code || job?.title),
+    sanitizeDriveName(categoryName),
+    sanitizeDriveName(fileName),
+  ].filter(Boolean);
+
+  return parts.join(" - ");
+}
+
 function getOAuthClient() {
   if (!env.googleClientId || !env.googleClientSecret || !env.googleRefreshToken) {
     throw new ApiError(
@@ -103,16 +113,17 @@ export async function uploadDocumentToEmployeeFolder({
 }) {
   const drive = getDrive(settings);
   const employeeFolderName = sanitizeDriveName(user.full_name);
-  const jobFolderName = sanitizeDriveName(job.job_code || job.title);
-  const pathParts =
-    status === "approved" && categoryName
-      ? [employeeFolderName, jobFolderName, categoryName]
-      : [employeeFolderName, jobFolderName];
-  const folderId = await ensureDocumentPath(drive, settings, status, pathParts);
+  const folderId = await ensureDocumentPath(drive, settings, status, [
+    employeeFolderName,
+  ]);
 
   const uploaded = await drive.files.create({
     requestBody: {
-      name: file.originalname,
+      name: buildDriveFileName({
+        fileName: file.originalname,
+        job,
+        categoryName,
+      }),
       parents: [folderId],
     },
     media: {
@@ -138,12 +149,9 @@ export async function moveDocumentToReviewFolder({
   if (!document.google_drive_file_id?.startsWith("local-")) {
     const drive = getDrive(settings);
     const employeeFolderName = sanitizeDriveName(document.uploaded_by_name);
-    const jobFolderName = sanitizeDriveName(document.job_code || document.job_title);
-    const pathParts =
-      status === "approved"
-        ? [employeeFolderName, jobFolderName, categoryName]
-        : [employeeFolderName, jobFolderName];
-    const folderId = await ensureDocumentPath(drive, settings, status, pathParts);
+    const folderId = await ensureDocumentPath(drive, settings, status, [
+      employeeFolderName,
+    ]);
 
     const current = await drive.files.get({
       fileId: document.google_drive_file_id,
