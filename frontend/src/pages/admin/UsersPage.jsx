@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Eye, EyeOff, Plus, X } from "lucide-react";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../lib/api";
@@ -23,6 +23,7 @@ export default function UsersPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function loadUsers() {
     try {
@@ -61,6 +62,7 @@ export default function UsersPage() {
   }
 
   function closeModal() {
+    setShowPassword(false);
     setIsModalOpen(false);
     setForm(initialForm);
     setError("");
@@ -199,17 +201,35 @@ export default function UsersPage() {
                   <span className="mb-2 block text-sm font-medium text-slate-600">
                     {label}
                   </span>
-                  <input
-                    type={key === "password" ? "password" : "text"}
-                    value={form[key]}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        [key]: event.target.value,
-                      }))
-                    }
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[var(--brand-500)] focus:bg-white"
-                  />
+                  <div className="relative">
+                    <input
+                      type={key === "password" && !showPassword ? "password" : "text"}
+                      value={form[key]}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          [key]: event.target.value,
+                        }))
+                      }
+                      className={`w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[var(--brand-500)] focus:bg-white ${
+                        key === "password" ? "pr-12" : ""
+                      }`}
+                    />
+                    {key === "password" ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((current) => !current)}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    ) : null}
+                  </div>
                 </label>
               ))}
 

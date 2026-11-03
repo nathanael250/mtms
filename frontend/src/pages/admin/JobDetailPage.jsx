@@ -21,6 +21,7 @@ import {
   User,
   MoreHorizontal,
   TrendingUp,
+  X,
 } from "lucide-react";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
@@ -202,6 +203,14 @@ function Ring({ pct, size = 88, stroke = 7 }) {
   );
 }
 
+function toDateInput(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 /* ─── MAIN PAGE ───────────────────────────────────────────────────────── */
 export default function JobDetailPage() {
   const { id }    = useParams();
@@ -210,6 +219,12 @@ export default function JobDetailPage() {
   const [pageData, setPageData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error,    setError]    = useState("");
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ title: "", description: "", start_date: "", end_date: "" });
+  const [editFile, setEditFile] = useState(null);
+  const [editError, setEditError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -228,7 +243,43 @@ export default function JobDetailPage() {
       }
     }
     load();
-  }, [id, token]);
+  }, [id, token, reloadKey]);
+
+  function openEdit() {
+    const job = pageData?.job;
+    if (!job) return;
+    setEditForm({
+      title: job.title || "",
+      description: job.description || "",
+      start_date: toDateInput(job.start_date),
+      end_date: toDateInput(job.end_date),
+    });
+    setEditFile(null);
+    setEditError("");
+    setIsEditOpen(true);
+  }
+
+  async function handleEditSubmit(event) {
+    event.preventDefault();
+    if (!editForm.title.trim()) {
+      setEditError("Job title is required.");
+      return;
+    }
+    setIsSaving(true);
+    setEditError("");
+    try {
+      const formData = new FormData();
+      Object.entries(editForm).forEach(([key, value]) => formData.append(key, value));
+      if (editFile) formData.append("file", editFile);
+      await apiFetch(`/jobs/${id}`, { method: "PUT", body: formData, token });
+      setIsEditOpen(false);
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setEditError(e.message);
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   const d = useMemo(() => {
     const job          = pageData?.job         || null;
@@ -330,7 +381,7 @@ export default function JobDetailPage() {
           </Link>
 
           <div className="flex items-center gap-2">
-            <button className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-[13px] font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 active:scale-[0.98]">
+            <button onClick={openEdit} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2 text-[13px] font-semibold text-white shadow-sm shadow-blue-200 transition hover:bg-blue-700 active:scale-[0.98]">
               <Edit size={13} /> Edit Job
             </button>
             <button className="rounded-xl border border-slate-200 bg-white px-5 py-2 text-[13px] font-medium text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
@@ -713,6 +764,92 @@ export default function JobDetailPage() {
           </div>{/* end RIGHT */}
         </div>
       </div>
+      {isEditOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <form
+            onSubmit={handleEditSubmit}
+            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-900">Edit Job</h2>
+              <button
+                type="button"
+                onClick={() => setIsEditOpen(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">Job code: {d.job.job_code}</p>
+
+            <div className="mt-4 space-y-4">
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-slate-600">Title</span>
+                <input
+                  value={editForm.title}
+                  onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:bg-white"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-slate-600">Description</span>
+                <textarea
+                  rows="4"
+                  value={editForm.description}
+                  onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:bg-white"
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-4">
+                {[["start_date", "Start Date"], ["end_date", "End Date"]].map(([key, label]) => (
+                  <label key={key} className="block">
+                    <span className="mb-1.5 block text-sm font-medium text-slate-600">{label}</span>
+                    <input
+                      type="date"
+                      value={editForm[key]}
+                      onChange={(e) => setEditForm((f) => ({ ...f, [key]: e.target.value }))}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:bg-white"
+                    />
+                  </label>
+                ))}
+              </div>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium text-slate-600">
+                  Replace approval document (optional)
+                </span>
+                <input
+                  type="file"
+                  onChange={(e) => setEditFile(e.target.files?.[0] || null)}
+                  className="block w-full text-sm text-slate-500"
+                />
+              </label>
+            </div>
+
+            {editError && (
+              <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm text-rose-700">
+                {editError}
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsEditOpen(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                {isSaving ? "Saving..." : "Save changes"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </DashboardLayout>
   );
 }
