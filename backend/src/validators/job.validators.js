@@ -1,7 +1,6 @@
 import { body } from "express-validator";
 
 export const createJobValidator = [
-  body("job_code").trim().notEmpty().withMessage("Job code is required."),
   body("title").trim().notEmpty().withMessage("Job title is required."),
   body("created_by").isInt({ min: 1 }).withMessage("Created by is required."),
   body("description").optional({ values: "falsy" }).trim(),

@@ -6,7 +6,6 @@ import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../lib/api";
 
 const initialForm = {
-  job_code: "",
   title: "",
   description: "",
   start_date: "",
@@ -409,10 +408,7 @@ export default function JobsPage() {
                     </p>
                   </div>
 
-                  {[
-                    ["job_code", "Job Code"],
-                    ["title", "Title"],
-                  ].map(([key, label]) => (
+                  {[["title", "Title"]].map(([key, label]) => (
                     <label key={key} className="block">
                       <span className="mb-2 block text-sm font-medium text-slate-600">
                         {label}

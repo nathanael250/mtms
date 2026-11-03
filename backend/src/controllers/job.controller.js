@@ -21,35 +21,46 @@ async function getJobOrThrow(jobId) {
   return rows[0];
 }
 
+async function generateJobCode() {
+  const prefix = `JOB-${new Date().getFullYear()}-`;
+  const [rows] = await getPool().query(
+    `SELECT MAX(CAST(SUBSTRING(job_code, ?) AS UNSIGNED)) AS last_number
+     FROM jobs WHERE job_code LIKE ?`,
+    [prefix.length + 1, `${prefix}%`]
+  );
+  const next = (rows[0].last_number || 0) + 1;
+  return `${prefix}${String(next).padStart(4, "0")}`;
+}
+
 export const createJob = asyncHandler(async (req, res) => {
-  const { job_code, title, description, start_date, end_date, created_by } =
-    req.body;
+  const { title, description, start_date, end_date, created_by } = req.body;
   const approvalDocument = req.file
     ? req.file.path.replace(`${process.cwd()}/`, "")
     : null;
 
-  const [duplicates] = await getPool().query(
-    "SELECT id FROM jobs WHERE job_code = ? LIMIT 1",
-    [job_code]
-  );
-
-  if (duplicates.length) {
-    throw new ApiError(409, "Job code already exists.");
+  let result;
+  for (let attempt = 1; ; attempt += 1) {
+    const jobCode = await generateJobCode();
+    try {
+      [result] = await getPool().query(
+        `INSERT INTO jobs (job_code, title, description, approval_document, created_by, start_date, end_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          jobCode,
+          title,
+          description || null,
+          approvalDocument,
+          created_by,
+          start_date || null,
+          end_date || null,
+        ]
+      );
+      break;
+    } catch (error) {
+      // Two jobs created at the same moment can pick the same number; retry.
+      if (error.code !== "ER_DUP_ENTRY" || attempt >= 5) throw error;
+    }
   }
-
-  const [result] = await getPool().query(
-    `INSERT INTO jobs (job_code, title, description, approval_document, created_by, start_date, end_date)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [
-      job_code,
-      title,
-      description || null,
-      approvalDocument,
-      created_by,
-      start_date || null,
-      end_date || null,
-    ]
-  );
 
   await createActivityLog({
     jobId: result.insertId,
