@@ -118,7 +118,7 @@ function StatCard({ icon: Icon, label, value, detail, tone }) {
   };
 
   return (
-    <div className="rounded-[8px] border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+    <div className="app-panel rounded-[8px] border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
       <div className="grid gap-3 sm:flex sm:items-center sm:gap-4">
         <div
           className={`flex h-10 w-10 items-center justify-center rounded-[8px] sm:h-11 sm:w-11 ${
@@ -361,7 +361,7 @@ export default function WorkflowPage() {
             className="w-full rounded-[8px] border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-[var(--brand-400)] focus:ring-4 focus:ring-blue-100"
           />
         </div>
-        <div className="flex items-center gap-2 rounded-[8px] border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">
+        <div className="app-panel flex items-center gap-2 rounded-[8px] border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm">
           <CalendarDays className="h-4 w-4 text-slate-500" />
           Today: {formatDate(new Date())}
         </div>
@@ -399,7 +399,7 @@ export default function WorkflowPage() {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="overflow-hidden rounded-[8px] border border-slate-200 bg-white shadow-sm">
+        <section className="app-panel overflow-hidden rounded-[8px] border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 px-4 py-4">
             <h2 className="text-base font-bold text-slate-950">Project Workflow</h2>
             <p className="mt-1 text-sm text-slate-500">
@@ -428,7 +428,7 @@ export default function WorkflowPage() {
         </section>
 
         <aside className="space-y-5">
-          <section className="rounded-[8px] border border-slate-200 bg-white p-4 shadow-sm">
+          <section className="app-panel rounded-[8px] border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-base font-bold text-slate-950">Deadline Alerts</h2>
               <span className="text-xs font-semibold text-[var(--brand-600)]">
@@ -462,9 +462,9 @@ export default function WorkflowPage() {
             </div>
           </section>
 
-          <section className="rounded-[8px] border border-slate-200 bg-white p-4 shadow-sm">
+          <section className="app-panel rounded-[8px] border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="text-base font-bold text-slate-950">Employee Workload</h2>
-            <div className="mt-4 overflow-hidden rounded-[8px] border border-slate-100">
+            <div className="app-table-frame mt-4 overflow-hidden rounded-[8px] border border-slate-100">
               <table className="min-w-full text-left text-xs">
                 <thead className="bg-slate-50 font-bold uppercase text-slate-500">
                   <tr>

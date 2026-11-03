@@ -46,5 +46,8 @@ export const env = {
   wawpAccessToken: process.env.WAWP_ACCESS_TOKEN || "",
   whatsappAccessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
   whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+  dailyReminderEnabled: process.env.DAILY_REMINDER_ENABLED === "true",
+  dailyReminderTime: process.env.DAILY_REMINDER_TIME || "09:30",
+  reminderTimezone: process.env.REMINDER_TIMEZONE || "Africa/Kigali",
   whatsappApiVersion: process.env.WHATSAPP_API_VERSION || "v20.0",
 };

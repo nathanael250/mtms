@@ -143,6 +143,14 @@ async function sendCloudWhatsapp({ to, text }) {
   return { skipped: false };
 }
 
+// Unlike sendWhatsapp, never falls back to the default number when `to` is empty.
+export async function sendWhatsappMessage({ to, text }) {
+  if (!normalizeWhatsappNumber(to)) {
+    return { skipped: true };
+  }
+  return sendWhatsapp({ to, text });
+}
+
 export async function sendMentionNotifications({
   taggedUser,
   authorName,
@@ -169,4 +177,71 @@ export async function sendMentionNotifications({
       console.error(result.reason);
     }
   }
+}
+
+export async function sendPlanCommentNotification({
+  employee,
+  authorName,
+  planDate,
+  taskDescription,
+  message,
+}) {
+  if (!employee.phone) {
+    return "no_phone";
+  }
+
+  const dateLabel = new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${planDate}T00:00:00Z`));
+  const firstName = String(employee.full_name || "").trim().split(/\s+/)[0] || "there";
+
+  const text = [
+    `Hello ${firstName},`,
+    "",
+    taskDescription
+      ? `${authorName} commented on your planned task "${taskDescription}" (${dateLabel}):`
+      : `${authorName} commented on your daily plan for ${dateLabel}:`,
+    "",
+    message,
+    "",
+    "Please sign in to MOPAS, open My Tasks > Planned tasks, pick that date and update your plan if needed.",
+  ].join("\n");
+
+  const result = await sendWhatsapp({ to: employee.phone, text });
+  return result.skipped ? "disabled" : "sent";
+}
+
+export async function sendMentionResolvedNotification({
+  tagger,
+  resolverName,
+  taskTitle,
+  originalMessage,
+  resolutionMessage,
+  fileCount,
+}) {
+  if (!tagger.phone) {
+    return "no_phone";
+  }
+
+  const firstName = String(tagger.full_name || "").trim().split(/\s+/)[0] || "there";
+  const lines = [
+    `Hello ${firstName},`,
+    "",
+    `${resolverName} resolved your mention on task "${taskTitle}".`,
+    "",
+    `Your message: ${originalMessage}`,
+  ];
+  if (resolutionMessage) {
+    lines.push("", `Their reply: ${resolutionMessage}`);
+  }
+  if (fileCount) {
+    lines.push("", `${fileCount} document${fileCount === 1 ? "" : "s"} attached.`);
+  }
+  lines.push("", "Please sign in to MOPAS and open My Mentions to see the details.");
+
+  const result = await sendWhatsapp({ to: tagger.phone, text: lines.join("\n") });
+  return result.skipped ? "disabled" : "sent";
 }

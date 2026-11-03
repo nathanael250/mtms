@@ -7,6 +7,9 @@ import {
   Circle,
   FileUp,
   ListChecks,
+  MessageSquare,
+  Paperclip,
+  Pencil,
   Plus,
   Trash2,
   X,
@@ -14,6 +17,14 @@ import {
 import DashboardLayout from "../../components/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../lib/api";
+import {
+  ACCEPTED_FILE_TYPES,
+  getUploadUrl,
+  uploadMentionFiles,
+  uploadReportFiles,
+} from "../../lib/uploads";
+import FilePicker from "../../components/FilePicker";
+import AttachmentLinks from "../../components/AttachmentLinks";
 
 const initialTaskForm = {
   job_id: "",
@@ -91,6 +102,18 @@ export default function TasksPage() {
   const [isPlannedSubmitting, setIsPlannedSubmitting] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
   const [activeTab, setActiveTab] = useState("assigned");
+  const [isPlannedToday, setIsPlannedToday] = useState(true);
+  const [canEditPlanned, setCanEditPlanned] = useState(true);
+  const [dayComments, setDayComments] = useState([]);
+  const [reportFiles, setReportFiles] = useState([]);
+  const [mentionFiles, setMentionFiles] = useState([]);
+  const [dayFiles, setDayFiles] = useState([]);
+  const [isUploadingDayFile, setIsUploadingDayFile] = useState(false);
+  const [dayReport, setDayReport] = useState(null);
+  const [daySummary, setDaySummary] = useState("");
+  const [isSavingDayReport, setIsSavingDayReport] = useState(false);
+  const [editingPlanned, setEditingPlanned] = useState(null);
+  const [isSavingPlanned, setIsSavingPlanned] = useState(false);
 
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) || null;
 
@@ -142,15 +165,26 @@ export default function TasksPage() {
     }
   }
 
-  async function loadPlannedTasks(date = plannedDate) {
+  // No date means today; the server decides what today is.
+  async function loadPlannedTasks(date) {
     if (isAdmin) {
       setPlannedTasks([]);
       return;
     }
 
     try {
-      const data = await apiFetch(`/daily-tasks?date=${date}`, { token });
+      const data = await apiFetch(
+        date ? `/daily-tasks?date=${date}` : "/daily-tasks",
+        { token }
+      );
+      setPlannedDate(data.date);
+      setIsPlannedToday(data.is_today);
+      setCanEditPlanned(data.is_editable);
       setPlannedTasks(data.tasks || []);
+      setDayComments(data.comments || []);
+      setDayReport(data.day_report || null);
+      setDayFiles(data.day_files || []);
+      setDaySummary(data.day_report?.summary || "");
     } catch (loadError) {
       setError(loadError.message);
     }
@@ -162,11 +196,11 @@ export default function TasksPage() {
 
   useEffect(() => {
     if (activeTab === "planned") {
-      loadPlannedTasks(plannedDate);
+      loadPlannedTasks();
       setSelectedTaskId(null);
       setReports([]);
     }
-  }, [activeTab, isAdmin, token, plannedDate]);
+  }, [activeTab, isAdmin, token]);
 
   useEffect(() => {
     loadReports(selectedTaskId);
@@ -304,6 +338,8 @@ export default function TasksPage() {
   function closeReportModal() {
     setIsReportModalOpen(false);
     setReportForm(initialReportForm);
+    setReportFiles([]);
+    setMentionFiles([]);
     setIsReportSubmitting(false);
   }
 
@@ -410,6 +446,132 @@ export default function TasksPage() {
     }
   }
 
+  function openPlannedEdit(task) {
+    setEditingPlanned({
+      id: task.id,
+      description: task.description || "",
+      planned_time: task.planned_time ? String(task.planned_time).slice(0, 5) : "",
+      todos: (task.todo_items || []).map((item) => ({
+        id: item.id,
+        description: item.description,
+      })),
+    });
+  }
+
+  async function handleSavePlannedEdit(event) {
+    event.preventDefault();
+    if (!editingPlanned.description.trim()) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setIsSavingPlanned(true);
+
+    try {
+      await apiFetch(`/daily-tasks/${editingPlanned.id}`, {
+        method: "PUT",
+        token,
+        body: {
+          description: editingPlanned.description,
+          planned_time: editingPlanned.planned_time,
+          todo_items: editingPlanned.todos,
+        },
+      });
+      setEditingPlanned(null);
+      setSuccess("Planned task updated.");
+      await loadPlannedTasks(plannedDate);
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setIsSavingPlanned(false);
+    }
+  }
+
+  // Refreshes only the file list so text the employee is still typing is kept.
+  async function refreshDayFiles() {
+    const data = await apiFetch(`/daily-tasks?date=${plannedDate}`, { token });
+    setDayFiles(data.day_files || []);
+  }
+
+  async function handleDayFilesPicked(event) {
+    const picked = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!picked.length) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setIsUploadingDayFile(true);
+
+    try {
+      for (const file of picked) {
+        const formData = new FormData();
+        formData.append("related_type", "report");
+        formData.append("date", plannedDate);
+        formData.append("file", file);
+        await apiFetch("/daily-tasks/day-report/files", {
+          method: "POST",
+          token,
+          body: formData,
+        });
+      }
+      await refreshDayFiles();
+    } catch (uploadError) {
+      setError(uploadError.message);
+      await refreshDayFiles().catch(() => {});
+    } finally {
+      setIsUploadingDayFile(false);
+    }
+  }
+
+  async function handleDeleteDayFile(fileId) {
+    setError("");
+    try {
+      await apiFetch(`/daily-tasks/day-report/files/${fileId}`, {
+        method: "DELETE",
+        token,
+      });
+      await refreshDayFiles();
+    } catch (deleteError) {
+      setError(deleteError.message);
+    }
+  }
+
+  async function handleSaveDayReport() {
+    if (
+      !isPlannedToday &&
+      !window.confirm(
+        "Submitting the day report closes this day again. You will not be able to change your tasks, files or report afterwards unless your admin reopens it.\n\nSubmit now?"
+      )
+    ) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setIsSavingDayReport(true);
+
+    try {
+      const data = await apiFetch("/daily-tasks/day-report", {
+        method: "PUT",
+        token,
+        body: { date: plannedDate, summary: daySummary },
+      });
+      setSuccess(
+        data.closed
+          ? "Day report submitted. This day is now closed."
+          : "Day report saved. Your admin can now read it."
+      );
+      await loadPlannedTasks(plannedDate);
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setIsSavingDayReport(false);
+    }
+  }
+
   async function handleReportSubmit(event) {
     event.preventDefault();
     if (!selectedTask) {
@@ -433,8 +595,9 @@ export default function TasksPage() {
         },
       });
 
+      let mentionUploadFailed = false;
       if (reportForm.create_mention) {
-        await apiFetch("/report-mentions", {
+        const mentionResponse = await apiFetch("/report-mentions", {
           method: "POST",
           token,
           body: {
@@ -444,10 +607,39 @@ export default function TasksPage() {
             message: reportForm.mention_message,
           },
         });
+
+        if (mentionFiles.length) {
+          try {
+            await uploadMentionFiles(token, mentionResponse.mention.id, mentionFiles);
+          } catch (uploadError) {
+            mentionUploadFailed = uploadError.message;
+          }
+        }
+      }
+
+      let uploadFailed = false;
+      if (reportFiles.length) {
+        try {
+          await uploadReportFiles(token, reportResponse.report.id, reportFiles);
+        } catch (uploadError) {
+          uploadFailed = uploadError.message;
+        }
       }
 
       setReportForm(initialReportForm);
-      setSuccess("Daily report submitted successfully.");
+      setReportFiles([]);
+      setMentionFiles([]);
+      if (uploadFailed || mentionUploadFailed) {
+        setError(
+          `Report saved, but some files failed to upload: ${uploadFailed || mentionUploadFailed}`
+        );
+      } else {
+        setSuccess(
+          reportFiles.length
+            ? "Daily report and attachments submitted successfully."
+            : "Daily report submitted successfully."
+        );
+      }
       closeReportModal();
       loadReports(selectedTask.id);
     } catch (submitError) {
@@ -478,7 +670,7 @@ export default function TasksPage() {
 
       <div className="grid gap-6">
         <section
-          className={`rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm ${
+          className={`app-panel rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm ${
             isAdmin ? "xl:h-[calc(100vh-150px)] xl:overflow-y-auto" : ""
           }`}
         >
@@ -536,43 +728,62 @@ export default function TasksPage() {
 
           {activeTab === "planned" && !isAdmin ? (
             <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]">
-              <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
+              <div className="app-panel rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
                 <div className="flex items-start gap-3">
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-[var(--brand-700)] shadow-sm">
                     <ListChecks className="h-5 w-5" />
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-950">
-                      Create a daily plan
+                      {isPlannedToday
+                        ? "Create a daily plan"
+                        : canEditPlanned
+                          ? "This day is unlocked"
+                          : "Viewing another day"}
                     </h3>
                     <p className="mt-1 text-sm leading-6 text-slate-600">
-                      Create the planned task, set the time, then list the todo
-                      items inside that task.
+                      {isPlannedToday
+                        ? "Create the planned task, set the time, then list the todo items inside that task."
+                        : canEditPlanned
+                          ? "Your admin reopened this day. Add or update your plan, tick what you finished, and write the day report. The day closes again when you submit the report."
+                          : "You can look at what you planned on other dates, but you can only plan and change tasks on the day itself."}
                     </p>
                   </div>
                 </div>
 
                 <label className="mt-5 block">
                   <span className="mb-2 block text-sm font-semibold text-slate-700">
-                    Planning date
+                    Date
                   </span>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <input
                       type="date"
                       value={plannedDate}
-                      onChange={(event) => setPlannedDate(event.target.value)}
+                      onChange={(event) =>
+                        event.target.value && loadPlannedTasks(event.target.value)
+                      }
                       className="w-full rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[var(--brand-400)] focus:ring-4 focus:ring-blue-100 sm:flex-1"
                     />
                     <button
                       type="button"
-                      onClick={() => setPlannedDate(getDateInputValue())}
-                      className="rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-[var(--brand-700)] transition hover:bg-blue-50"
+                      onClick={() => loadPlannedTasks()}
+                      disabled={isPlannedToday}
+                      className="rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm font-semibold text-[var(--brand-700)] transition hover:bg-blue-50 disabled:cursor-default disabled:opacity-50"
                     >
                       Today
                     </button>
                   </div>
+                  <span className="mt-2 block text-xs text-slate-500">
+                    {isPlannedToday
+                      ? "Planned tasks lock at midnight."
+                      : canEditPlanned
+                        ? "Unlocked by your admin. You can complete this day."
+                        : "Read-only: this is not today."}
+                  </span>
                 </label>
 
+                {canEditPlanned ? (
+                  <>
                 <label className="mt-5 block">
                   <span className="mb-2 block text-sm font-semibold text-slate-700">
                     Planned time
@@ -623,9 +834,11 @@ export default function TasksPage() {
                   <Plus className="h-4 w-4" />
                   {isPlannedSubmitting ? "Adding..." : "Create planned task"}
                 </button>
+                  </>
+                ) : null}
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+              <div className="app-panel rounded-2xl border border-slate-200 bg-white p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 className="text-base font-bold text-slate-950">
@@ -649,6 +862,27 @@ export default function TasksPage() {
                   </span>
                 </div>
 
+                {dayComments.filter((comment) => !comment.daily_task_id).length ? (
+                  <div className="mt-4 space-y-2">
+                    {dayComments
+                      .filter((comment) => !comment.daily_task_id)
+                      .map((comment) => (
+                        <div
+                          key={comment.id}
+                          className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3"
+                        >
+                          <p className="flex items-center gap-1.5 text-xs font-semibold text-blue-800">
+                            <MessageSquare className="h-3.5 w-3.5" />
+                            {comment.author_name} commented on this day
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+                            {comment.message}
+                          </p>
+                        </div>
+                      ))}
+                  </div>
+                ) : null}
+
                 <div className="mt-5 space-y-3">
                   {plannedTasks.map((task) => {
                     const todoItems = task.todo_items || [];
@@ -660,7 +894,7 @@ export default function TasksPage() {
                     return (
                       <article
                         key={task.id}
-                        className={`rounded-2xl border p-4 ${
+                        className={`app-panel rounded-2xl border p-4 ${
                           isTaskDone
                             ? "border-emerald-100 bg-emerald-50"
                             : "border-slate-100 bg-slate-50"
@@ -670,7 +904,8 @@ export default function TasksPage() {
                           <button
                             type="button"
                             onClick={() => handleTogglePlannedTask(task.id)}
-                            className={`mt-0.5 transition ${
+                            disabled={!canEditPlanned}
+                            className={`mt-0.5 transition disabled:cursor-default ${
                               isTaskDone
                                 ? "text-emerald-600 hover:text-emerald-700"
                                 : "text-slate-400 hover:text-[var(--brand-700)]"
@@ -709,7 +944,8 @@ export default function TasksPage() {
                                     <button
                                       type="button"
                                       onClick={() => handleTogglePlannedTask(item.id)}
-                                      className={`mt-0.5 transition ${
+                                      disabled={!canEditPlanned}
+                                      className={`mt-0.5 transition disabled:cursor-default ${
                                         item.is_completed
                                           ? "text-emerald-600"
                                           : "text-slate-400 hover:text-[var(--brand-700)]"
@@ -739,7 +975,34 @@ export default function TasksPage() {
                                 No todo items added inside this task.
                               </p>
                             )}
+
+                            {dayComments
+                              .filter((comment) => comment.daily_task_id === task.id)
+                              .map((comment) => (
+                                <div
+                                  key={comment.id}
+                                  className="mt-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2"
+                                >
+                                  <p className="flex items-center gap-1.5 text-xs font-semibold text-blue-800">
+                                    <MessageSquare className="h-3.5 w-3.5" />
+                                    {comment.author_name}
+                                  </p>
+                                  <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">
+                                    {comment.message}
+                                  </p>
+                                </div>
+                              ))}
                           </div>
+                          {canEditPlanned ? (
+                            <>
+                          <button
+                            type="button"
+                            onClick={() => openPlannedEdit(task)}
+                            className="rounded-lg p-1 text-slate-400 transition hover:bg-white hover:text-[var(--brand-700)]"
+                            aria-label="Edit planned task"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleDeletePlannedTask(task.id)}
@@ -748,15 +1011,128 @@ export default function TasksPage() {
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
+                            </>
+                          ) : null}
                         </div>
                       </article>
                     );
                   })}
 
                   {!plannedTasks.length ? (
-                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                    <div className="app-panel rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
                       No planned tasks for this date.
                     </div>
+                  ) : null}
+                </div>
+
+                <div
+                  className={`mt-5 rounded-2xl border p-4 ${
+                    dayReport
+                      ? "border-emerald-100 bg-emerald-50"
+                      : "border-slate-200 bg-slate-50"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-sm font-bold text-slate-900">
+                      Finish the day: report
+                    </h4>
+                    {dayReport ? (
+                      <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                        Submitted
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                        Not submitted
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {canEditPlanned
+                      ? `Explain how the work was done on ${formatDate(plannedDate)}.`
+                      : `Report for ${formatDate(plannedDate)}.`}
+                  </p>
+                  {!canEditPlanned ? (
+                    <p className="mt-3 whitespace-pre-wrap rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-800">
+                      {dayReport ? dayReport.summary : "No report was submitted for this day."}
+                    </p>
+                  ) : null}
+                  {!canEditPlanned ? <AttachmentLinks files={dayFiles} /> : null}
+                  {canEditPlanned ? (
+                  <>
+                  <textarea
+                    value={daySummary}
+                    onChange={(event) => setDaySummary(event.target.value)}
+                    rows="5"
+                    maxLength={5000}
+                    placeholder="What did you finish, how did you do it, and what is still pending?"
+                    className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[var(--brand-400)] focus:ring-4 focus:ring-blue-100"
+                  />
+                  {!isPlannedToday ? (
+                    <p className="mt-2 text-xs font-medium text-amber-700">
+                      Attach your files first. Submitting the report closes this day again.
+                    </p>
+                  ) : null}
+                  <div className="mt-3">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50">
+                      <Paperclip className="h-3.5 w-3.5" />
+                      {isUploadingDayFile ? "Uploading..." : "Attach files"}
+                      <input
+                        type="file"
+                        multiple
+                        accept={ACCEPTED_FILE_TYPES}
+                        onChange={handleDayFilesPicked}
+                        disabled={isUploadingDayFile}
+                        className="sr-only"
+                      />
+                    </label>
+                    <span className="ml-3 text-xs text-slate-500">
+                      Files are saved as soon as you pick them.
+                    </span>
+                    {dayFiles.length ? (
+                      <div className="mt-2 space-y-1.5">
+                        {dayFiles.map((file) => (
+                          <div
+                            key={file.id}
+                            className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-sm"
+                          >
+                            <a
+                              href={getUploadUrl(file.file_path)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="truncate text-[var(--brand-700)] hover:underline"
+                            >
+                              {file.file_name}
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDayFile(file.id)}
+                              className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600"
+                              aria-label={`Remove ${file.file_name}`}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSaveDayReport}
+                    disabled={isSavingDayReport || !daySummary.trim()}
+                    className="mt-3 inline-flex items-center justify-center gap-2 rounded-2xl bg-[var(--brand-700)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[var(--brand-600)] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSavingDayReport
+                      ? "Saving..."
+                      : isPlannedToday
+                        ? dayReport
+                          ? "Update day report"
+                          : "Submit day report"
+                        : dayReport
+                          ? "Resubmit and close day"
+                          : "Submit day report and close day"}
+                  </button>
+                  </>
                   ) : null}
                 </div>
               </div>
@@ -856,7 +1232,7 @@ export default function TasksPage() {
 
       {completionTask ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4">
-          <div className="w-full max-w-xl rounded-[30px] border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="app-panel w-full max-w-xl rounded-[30px] border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">
@@ -875,7 +1251,7 @@ export default function TasksPage() {
               </button>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <div className="app-panel mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-4">
               <p className="text-sm font-semibold text-slate-900">
                 {completionTask.title}
               </p>
@@ -926,7 +1302,7 @@ export default function TasksPage() {
               </label>
 
               {completionForm.files.length ? (
-                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                <div className="app-panel rounded-2xl border border-slate-200 bg-white p-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
                     Selected documents
                   </p>
@@ -934,7 +1310,7 @@ export default function TasksPage() {
                     {completionForm.files.map((file) => (
                       <div
                         key={`${file.name}-${file.size}`}
-                        className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-sm"
+                        className="app-panel flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2 text-sm"
                       >
                         <span className="truncate text-slate-700">{file.name}</span>
                         <span className="shrink-0 text-xs text-slate-400">
@@ -969,7 +1345,7 @@ export default function TasksPage() {
 
       {isReportModalOpen && selectedTask ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4">
-          <div className="w-full max-w-xl rounded-[30px] border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="app-panel w-full max-w-xl rounded-[30px] border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">
@@ -1072,7 +1448,7 @@ export default function TasksPage() {
               </label>
 
               {reportForm.create_mention ? (
-                <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="app-panel space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <label className="block">
                     <span className="mb-2 block text-sm font-medium text-slate-600">
                       Mention User
@@ -1114,8 +1490,15 @@ export default function TasksPage() {
                       className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
                     />
                   </label>
+                  <FilePicker
+                    files={mentionFiles}
+                    onChange={setMentionFiles}
+                    label="Documents for the tagged staff (optional)"
+                  />
                 </div>
               ) : null}
+
+              <FilePicker files={reportFiles} onChange={setReportFiles} />
 
               <div className="flex gap-3">
                 <button
@@ -1140,7 +1523,7 @@ export default function TasksPage() {
 
       {isAdmin && isModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[30px] border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="app-panel max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[30px] border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">Add Task</h2>
@@ -1287,6 +1670,118 @@ export default function TasksPage() {
               </div>
             </form>
           </div>
+        </div>
+      ) : null}
+      {editingPlanned ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4">
+          <form
+            onSubmit={handleSavePlannedEdit}
+            className="app-panel max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[30px] border border-slate-200 bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Edit planned task</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Change the task, its time, or the to-do items inside it.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingPlanned(null)}
+                className="rounded-2xl border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <label className="mt-5 block">
+              <span className="mb-2 block text-sm font-medium text-slate-600">Planned task</span>
+              <input
+                value={editingPlanned.description}
+                onChange={(event) =>
+                  setEditingPlanned((current) => ({ ...current, description: event.target.value }))
+                }
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[var(--brand-500)] focus:bg-white"
+              />
+            </label>
+
+            <label className="mt-4 block">
+              <span className="mb-2 block text-sm font-medium text-slate-600">Planned time</span>
+              <input
+                type="time"
+                value={editingPlanned.planned_time}
+                onChange={(event) =>
+                  setEditingPlanned((current) => ({ ...current, planned_time: event.target.value }))
+                }
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-[var(--brand-500)] focus:bg-white"
+              />
+            </label>
+
+            <div className="mt-4">
+              <span className="mb-2 block text-sm font-medium text-slate-600">To-do items</span>
+              <div className="space-y-2">
+                {editingPlanned.todos.map((todo, index) => (
+                  <div key={todo.id || `new-${index}`} className="flex gap-2">
+                    <input
+                      value={todo.description}
+                      onChange={(event) =>
+                        setEditingPlanned((current) => ({
+                          ...current,
+                          todos: current.todos.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, description: event.target.value } : item
+                          ),
+                        }))
+                      }
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-[var(--brand-500)] focus:bg-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingPlanned((current) => ({
+                          ...current,
+                          todos: current.todos.filter((_, itemIndex) => itemIndex !== index),
+                        }))
+                      }
+                      className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-rose-600"
+                      aria-label="Remove to-do item"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  setEditingPlanned((current) => ({
+                    ...current,
+                    todos: [...current.todos, { description: "" }],
+                  }))
+                }
+                className="mt-2 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add to-do item
+              </button>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setEditingPlanned(null)}
+                className="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingPlanned || !editingPlanned.description.trim()}
+                className="rounded-2xl bg-[var(--brand-700)] px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {isSavingPlanned ? "Saving..." : "Save changes"}
+              </button>
+            </div>
+          </form>
         </div>
       ) : null}
     </DashboardLayout>

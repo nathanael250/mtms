@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, ListTodo, TrendingUp, CheckCheck, AtSign, MessageSquarePlus } from "lucide-react";
 import DashboardLayout from "../../components/DashboardLayout";
+import DashboardStatCard from "../../components/DashboardStatCard";
 
 function toDateKey(value) {
   if (!value) {
@@ -108,7 +109,7 @@ function StaffTaskCalendar({ tasks }) {
   }
 
   return (
-    <section className="relative rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="app-panel relative rounded-none border border-slate-200 border-t-2 border-t-green-500 bg-white p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-slate-900">My Task Calendar</h2>
@@ -197,7 +198,7 @@ function StaffTaskCalendar({ tasks }) {
         ))}
 
         {selectedDate ? (
-          <div className="absolute left-1/2 top-1/2 z-20 w-[min(520px,calc(100%-16px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
+          <div className="app-panel absolute left-1/2 top-1/2 z-20 w-[min(520px,calc(100%-16px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-slate-900">
@@ -218,7 +219,7 @@ function StaffTaskCalendar({ tasks }) {
             </div>
             <div className="mt-3 grid max-h-[220px] gap-2 overflow-y-auto">
               {selectedTasks.map((task) => (
-                <div key={task.id} className="rounded-xl bg-slate-50 p-3">
+                <div key={task.id} className="app-panel rounded-xl bg-slate-50 p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-900">
@@ -273,11 +274,11 @@ function StaffTaskCalendar({ tasks }) {
 export default function StaffDashboardPage({ data, error }) {
   const stats = data?.stats || {};
   const items = [
-    ["My Tasks", stats.my_tasks],
-    ["My Ongoing Tasks", stats.my_ongoing_tasks],
-    ["My Completed Tasks", stats.my_completed_tasks],
-    ["My Mentions", stats.mentions_assigned_to_me],
-    ["Mentions I Created", stats.mentions_i_created],
+    ["My Tasks", stats.my_tasks, ListTodo, "blue"],
+    ["My Ongoing Tasks", stats.my_ongoing_tasks, TrendingUp, "purple"],
+    ["My Completed Tasks", stats.my_completed_tasks, CheckCheck, "rose"],
+    ["My Mentions", stats.mentions_assigned_to_me, AtSign, "cyan"],
+    ["Mentions I Created", stats.mentions_i_created, MessageSquarePlus, "orange"],
   ];
 
   return (
@@ -291,26 +292,16 @@ export default function StaffDashboardPage({ data, error }) {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
-        {items.map(([label, value]) => (
-          <div
-            key={label}
-            className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[28px] sm:p-6"
-          >
-            <p className="text-[12px] font-semibold leading-tight text-slate-500 sm:text-sm">
-              {label}
-            </p>
-            <p className="mt-3 text-[30px] font-bold leading-none tracking-tight text-slate-900 sm:mt-4 sm:text-3xl">
-              {value ?? 0}
-            </p>
-          </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+        {items.map(([label, value, icon, tone]) => (
+          <DashboardStatCard key={label} label={label} value={value} icon={icon} tone={tone} />
         ))}
       </div>
 
       <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,1fr)]">
         <StaffTaskCalendar tasks={data?.calendarTasks || data?.recentTasks || []} />
 
-        <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="app-panel rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Recent Tasks</h2>
           <p className="mt-1 text-sm text-slate-500">
             Latest assigned work from your jobs.
@@ -319,7 +310,7 @@ export default function StaffDashboardPage({ data, error }) {
             {(data?.recentTasks || []).map((item) => (
               <div
                 key={item.id}
-                className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
+                className="app-panel rounded-2xl border border-slate-100 bg-slate-50 p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">

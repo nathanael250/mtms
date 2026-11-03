@@ -160,7 +160,7 @@ function StatusIcon({ status }) {
 /* Reusable section card */
 function SCard({ children, className = "" }) {
   return (
-    <div className={`rounded-2xl border border-slate-200/80 bg-white shadow-sm ${className}`}>
+    <div className={`app-panel rounded-2xl border border-slate-200/80 bg-white shadow-sm ${className}`}>
       {children}
     </div>
   );
@@ -340,7 +340,7 @@ export default function JobDetailPage() {
   /* ── states ── */
   if (isLoading) return (
     <DashboardLayout title="Project / Job Progress" description="Monitor progress, tasks and activity.">
-      <div className="flex min-h-[380px] items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="app-panel flex min-h-[380px] items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col items-center gap-3">
           <LoaderCircle className="h-8 w-8 animate-spin text-blue-600" />
           <p className="text-sm text-slate-400">Loading project…</p>
@@ -359,7 +359,7 @@ export default function JobDetailPage() {
 
   if (!d.job) return (
     <DashboardLayout title="Project / Job Progress" description="Monitor progress, tasks and activity.">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">
+      <div className="app-panel rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">
         Project not found.
       </div>
     </DashboardLayout>
@@ -465,7 +465,7 @@ export default function JobDetailPage() {
                   <div className="flex shrink-0 flex-col gap-3 xl:w-[336px]">
                     <div className="grid grid-cols-2 gap-3">
                       {/* Progress ring card */}
-                      <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-4 py-4">
+                      <div className="app-panel flex flex-col items-center justify-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-4 py-4">
                         <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Progress</p>
                         <div className="relative">
                           <Ring pct={d.progress} />
@@ -476,7 +476,7 @@ export default function JobDetailPage() {
                       </div>
 
                       {/* Status info card */}
-                      <div className="flex flex-col justify-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-4">
+                      <div className="app-panel flex flex-col justify-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-4">
                         <div>
                           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Status</p>
                           <StatusBadge status={d.job.status} />
@@ -489,7 +489,7 @@ export default function JobDetailPage() {
                     </div>
 
                     {/* Progress bar */}
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                    <div className="app-panel rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
                       <div className="mb-1.5 flex items-center justify-between text-[11px] text-slate-400">
                         <span className="font-semibold uppercase tracking-wide">Overall completion</span>
                         <span className="font-bold tabular-nums text-blue-600">{d.progress}%</span>
@@ -658,7 +658,7 @@ export default function JobDetailPage() {
                       href={getUploadUrl(doc.file_path)}
                       target="_blank"
                       rel="noreferrer"
-                      className="group flex items-center gap-3 rounded-xl border border-rose-100 bg-rose-50/70 px-4 py-3 transition hover:border-rose-200 hover:bg-rose-50"
+                      className="app-panel group flex items-center gap-3 rounded-xl border border-rose-100 bg-rose-50/70 px-4 py-3 transition hover:border-rose-200 hover:bg-rose-50"
                     >
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-rose-100 transition group-hover:bg-rose-200">
                         <File size={15} color={RED} />
@@ -768,7 +768,7 @@ export default function JobDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <form
             onSubmit={handleEditSubmit}
-            className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"
+            className="app-panel w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"
           >
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-slate-900">Edit Job</h2>

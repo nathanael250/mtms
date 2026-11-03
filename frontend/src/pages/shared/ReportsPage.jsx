@@ -4,6 +4,9 @@ import { AtSign, Download, Plus } from "lucide-react";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../lib/api";
+import { uploadMentionFiles, uploadReportFiles } from "../../lib/uploads";
+import FilePicker from "../../components/FilePicker";
+import AttachmentLinks from "../../components/AttachmentLinks";
 
 const initialReportForm = {
   report_date: new Date().toISOString().slice(0, 10),
@@ -50,6 +53,8 @@ export default function ReportsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [reportFiles, setReportFiles] = useState([]);
+  const [mentionFiles, setMentionFiles] = useState([]);
   const selectedTask = tasks.find((task) => String(task.id) === String(taskId));
 
   async function loadReports() {
@@ -124,8 +129,9 @@ export default function ReportsPage() {
         },
       });
 
+      let mentionUploadFailed = false;
       if (reportForm.create_mention) {
-        await apiFetch("/report-mentions", {
+        const mentionResponse = await apiFetch("/report-mentions", {
           method: "POST",
           token,
           body: {
@@ -135,10 +141,39 @@ export default function ReportsPage() {
             message: reportForm.mention_message,
           },
         });
+
+        if (mentionFiles.length) {
+          try {
+            await uploadMentionFiles(token, mentionResponse.mention.id, mentionFiles);
+          } catch (uploadError) {
+            mentionUploadFailed = uploadError.message;
+          }
+        }
+      }
+
+      let uploadFailed = false;
+      if (reportFiles.length) {
+        try {
+          await uploadReportFiles(token, reportResponse.report.id, reportFiles);
+        } catch (uploadError) {
+          uploadFailed = uploadError.message;
+        }
       }
 
       setReportForm(initialReportForm);
-      setSuccess("Daily report submitted successfully.");
+      setReportFiles([]);
+      setMentionFiles([]);
+      if (uploadFailed || mentionUploadFailed) {
+        setError(
+          `Report saved, but some files failed to upload: ${uploadFailed || mentionUploadFailed}`
+        );
+      } else {
+        setSuccess(
+          reportFiles.length
+            ? "Daily report and attachments submitted successfully."
+            : "Daily report submitted successfully."
+        );
+      }
       loadReports();
     } catch (submitError) {
       setError(submitError.message);
@@ -228,7 +263,7 @@ export default function ReportsPage() {
         }
       >
       {taskId && user?.role !== "admin" ? (
-        <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm xl:sticky xl:top-6 xl:self-start">
+        <section className="app-panel rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm xl:sticky xl:top-6 xl:self-start">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
@@ -352,8 +387,10 @@ export default function ReportsPage() {
               />
             </label>
 
+            <FilePicker files={reportFiles} onChange={setReportFiles} />
+
             <div
-              className={`rounded-2xl border p-4 transition ${
+              className={`app-panel rounded-2xl border p-4 transition ${
                 reportForm.create_mention
                   ? "border-violet-300 bg-violet-50 shadow-sm"
                   : "border-amber-200 bg-amber-50"
@@ -432,6 +469,11 @@ export default function ReportsPage() {
                       className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
                     />
                   </label>
+                  <FilePicker
+                    files={mentionFiles}
+                    onChange={setMentionFiles}
+                    label="Documents for the tagged staff (optional)"
+                  />
                 </div>
               ) : null}
             </div>
@@ -450,7 +492,7 @@ export default function ReportsPage() {
         </section>
       ) : null}
 
-      <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="app-panel rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-slate-900">
             Submitted Reports
@@ -460,7 +502,7 @@ export default function ReportsPage() {
           </span>
         </div>
 
-        <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
+        <div className="app-table-frame mt-5 overflow-hidden rounded-2xl border border-slate-200">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -486,6 +528,7 @@ export default function ReportsPage() {
                     </td>
                     <td className="whitespace-pre-wrap px-4 py-4 leading-6 text-slate-600">
                       {report.completed_tasks || report.activity_done || "None"}
+                      <AttachmentLinks files={report.attachments} />
                     </td>
                     <td className="whitespace-pre-wrap px-4 py-4 leading-6 text-slate-600">
                       {report.ongoing_tasks || "None"}

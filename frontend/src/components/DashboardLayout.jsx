@@ -17,6 +17,7 @@ import {
   AlignJustify,
   ChevronDown,
   GitBranch,
+  Activity,
   X,
 } from "lucide-react";
 import mopasLogo from "../assets/mopas_logo.png";
@@ -27,6 +28,7 @@ const navigationByRole = {
   admin: [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { to: "/workflow", label: "Workflow", icon: GitBranch },
+    { to: "/daily-activities-log", label: "Daily Activities Log", icon: Activity },
     { to: "/jobs", label: "Jobs / Projects", icon: BriefcaseBusiness },
     { to: "/tasks", label: "Tasks", icon: ClipboardList },
     { to: "/reports", label: "Reports Overview", icon: FileText },
@@ -292,7 +294,7 @@ export default function DashboardLayout({ title, description, children }) {
               {isNotificationMenuOpen ? (
                 <div
                   role="menu"
-                  className="absolute right-0 top-full z-40 mt-2 w-[320px] overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-xl"
+                  className="app-panel absolute right-0 top-full z-40 mt-2 w-[320px] overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-xl"
                 >
                   <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                     <div>
@@ -386,7 +388,7 @@ export default function DashboardLayout({ title, description, children }) {
               {isAccountMenuOpen ? (
                 <div
                   role="menu"
-                  className="absolute right-0 top-full z-40 mt-2 w-64 overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-xl"
+                  className="app-panel absolute right-0 top-full z-40 mt-2 w-64 overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-xl"
                 >
                   <div className="border-b border-slate-100 px-4 py-4">
                     <div className="flex items-center gap-3">

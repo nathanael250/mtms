@@ -12,6 +12,8 @@ import MentionsPage from "./pages/shared/MentionsPage";
 import DocLibraryPage from "./pages/shared/DocLibraryPage";
 import ContactsPage from "./pages/shared/ContactsPage";
 import ActivityLogsPage from "./pages/admin/ActivityLogsPage";
+import EmployeeActivityPage from "./pages/admin/EmployeeActivityPage";
+import DailyActivitiesLogPage from "./pages/admin/DailyActivitiesLogPage";
 import SettingsPage from "./pages/admin/SettingsPage";
 import DocumentCategoriesPage from "./pages/admin/DocumentCategoriesPage";
 import GoogleDriveSettingsPage from "./pages/admin/GoogleDriveSettingsPage";
@@ -106,6 +108,22 @@ export default function App() {
         element={
           <ProtectedRoute allowedRoles={["admin", "staff"]}>
             <ContactsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/daily-activities-log"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <DailyActivitiesLogPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/daily-activities-log/:userId"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <EmployeeActivityPage />
           </ProtectedRoute>
         }
       />

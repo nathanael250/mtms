@@ -231,7 +231,7 @@ export default function JobsPage() {
           </div>
         ) : null}
 
-        <section className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm md:rounded-[30px]">
+        <section className="app-panel overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm md:rounded-[30px]">
           <div className="divide-y divide-slate-100 md:hidden">
             {jobs.map((job) => (
               <article key={job.id} className="p-4">
@@ -257,7 +257,7 @@ export default function JobsPage() {
                   {job.description || "No description provided."}
                 </p>
 
-                <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3 text-xs">
+                <div className="app-panel mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3 text-xs">
                   <div>
                     <p className="font-semibold uppercase tracking-[0.12em] text-slate-400">
                       Start
@@ -379,7 +379,7 @@ export default function JobsPage() {
 
       {isModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4">
-          <div className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[30px] border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="app-panel max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-[30px] border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">Add Job</h2>
@@ -481,7 +481,7 @@ export default function JobsPage() {
                   </label>
                 </div>
 
-                <div className="rounded-[24px] border border-[var(--brand-100)] bg-[var(--brand-50)] p-4">
+                <div className="app-panel rounded-[24px] border border-[var(--brand-100)] bg-[var(--brand-50)] p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h3 className="text-base font-semibold text-slate-900">
@@ -505,7 +505,7 @@ export default function JobsPage() {
                     {taskAssignments.map((task, index) => (
                       <div
                         key={index}
-                        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                        className="app-panel rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
                       >
                         <div className="mb-3 flex items-center justify-between gap-3">
                           <p className="text-sm font-semibold text-slate-900">

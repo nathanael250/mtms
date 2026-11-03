@@ -32,7 +32,7 @@ export default function SettingsPage() {
           <Link
             key={module.to}
             to={module.to}
-            className="group rounded-[12px] border border-slate-200 bg-white p-5 shadow-sm outline-none transition hover:-translate-y-0.5 hover:border-[var(--brand-400)] hover:shadow-md focus-visible:border-[var(--brand-500)] focus-visible:ring-4 focus-visible:ring-blue-100"
+            className="app-panel group rounded-[12px] border border-slate-200 bg-white p-5 shadow-sm outline-none transition hover:-translate-y-0.5 hover:border-[var(--brand-400)] hover:shadow-md focus-visible:border-[var(--brand-500)] focus-visible:ring-4 focus-visible:ring-blue-100"
             aria-label={`Open ${module.title}`}
           >
             <div className="flex items-start justify-between gap-4">

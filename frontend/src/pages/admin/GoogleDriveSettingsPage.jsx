@@ -66,7 +66,7 @@ export default function GoogleDriveSettingsPage() {
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <section className="rounded-[8px] border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="app-panel rounded-[8px] border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-base font-bold text-slate-950">
             Connection Settings
           </h2>
@@ -120,7 +120,7 @@ export default function GoogleDriveSettingsPage() {
           </form>
         </section>
 
-        <section className="rounded-[8px] border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="app-panel rounded-[8px] border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-base font-bold text-slate-950">
             Recommended Structure
           </h2>

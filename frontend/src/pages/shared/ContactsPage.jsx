@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Pencil, Plus, X } from "lucide-react";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../lib/api";
@@ -24,6 +24,7 @@ export default function ContactsPage() {
   const [success, setSuccess] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingContact, setEditingContact] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
 
@@ -51,18 +52,21 @@ export default function ContactsPage() {
     setIsSubmitting(true);
 
     try {
-      await apiFetch("/contacts", {
-        method: "POST",
+      await apiFetch(editingContact ? `/contacts/${editingContact.id}` : "/contacts", {
+        method: editingContact ? "PUT" : "POST",
         token,
         body: {
           ...form,
           category_id: Number(form.category_id),
-          created_by: user.id,
+          ...(editingContact ? {} : { created_by: user.id }),
         },
       });
-      setForm(initialForm);
-      setIsModalOpen(false);
-      setSuccess("Contact created successfully.");
+      closeModal();
+      setSuccess(
+        editingContact
+          ? "Contact updated successfully."
+          : "Contact created successfully."
+      );
       loadPageData();
     } catch (submitError) {
       setError(submitError.message);
@@ -74,10 +78,34 @@ export default function ContactsPage() {
   function openModal() {
     setError("");
     setSuccess("");
+    setEditingContact(null);
+    setForm(initialForm);
     setIsModalOpen(true);
   }
 
+  function openEdit(contact) {
+    setError("");
+    setSuccess("");
+    setEditingContact(contact);
+    setForm({
+      full_name: contact.full_name || "",
+      phone: contact.phone || "",
+      email: contact.email || "",
+      category_id: String(contact.category_id),
+      custom_category: contact.custom_category || "",
+      company_name: contact.company_name || "",
+      address: contact.address || "",
+      notes: contact.notes || "",
+    });
+    setIsModalOpen(true);
+  }
+
+  function canEdit(contact) {
+    return user?.role === "admin" || contact.created_by === user?.id;
+  }
+
   function closeModal() {
+    setEditingContact(null);
     setIsModalOpen(false);
     setForm(initialForm);
     setError("");
@@ -142,7 +170,7 @@ export default function ContactsPage() {
           </div>
         ) : null}
 
-        <section className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm md:rounded-[30px]">
+        <section className="app-panel overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm md:rounded-[30px]">
           <div className="flex flex-col gap-3 border-b border-slate-100 bg-white px-4 py-4 md:flex-row md:items-center md:justify-between md:px-6 md:py-5">
             <div className="flex w-full flex-col gap-3 md:flex-row md:items-center">
               <input
@@ -195,7 +223,7 @@ export default function ContactsPage() {
                   </p>
                 ) : null}
 
-                <div className="mt-4 grid gap-2 rounded-2xl bg-slate-50 p-3 text-xs text-slate-600">
+                <div className="app-panel mt-4 grid gap-2 rounded-2xl bg-slate-50 p-3 text-xs text-slate-600">
                   <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
                     <span className="font-semibold uppercase tracking-[0.12em] text-slate-400">
                       Phone
@@ -225,6 +253,16 @@ export default function ContactsPage() {
                     </span>
                   </div>
                 </div>
+                {canEdit(contact) ? (
+                  <button
+                    type="button"
+                    onClick={() => openEdit(contact)}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit
+                  </button>
+                ) : null}
               </article>
             ))}
             {!filteredContacts.length ? (
@@ -245,6 +283,7 @@ export default function ContactsPage() {
                     "Email",
                     "Company",
                     "Address",
+                    "",
                   ].map((heading) => (
                     <th
                       key={heading}
@@ -287,12 +326,24 @@ export default function ContactsPage() {
                     <td className="px-6 py-5 text-sm text-slate-500">
                       {contact.address || "No address"}
                     </td>
+                    <td className="px-6 py-5 text-right">
+                      {canEdit(contact) ? (
+                        <button
+                          type="button"
+                          onClick={() => openEdit(contact)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </button>
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
                 {!filteredContacts.length ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="px-6 py-10 text-center text-sm text-slate-500"
                     >
                       No contacts match your search or filter.
@@ -307,12 +358,16 @@ export default function ContactsPage() {
 
       {isModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[30px] border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="app-panel max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[30px] border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900">Add Contact</h2>
+                <h2 className="text-xl font-semibold text-slate-900">
+                  {editingContact ? "Edit Contact" : "Add Contact"}
+                </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Create a new contact for clients, suppliers, staff collaborators, or other partners.
+                  {editingContact
+                    ? "Update this contact's details."
+                    : "Create a new contact for clients, suppliers, staff collaborators, or other partners."}
                 </p>
               </div>
               <button
@@ -424,7 +479,7 @@ export default function ContactsPage() {
                   disabled={isSubmitting}
                   className="rounded-2xl bg-[var(--brand-700)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--brand-600)] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isSubmitting ? "Saving..." : "Save Contact"}
+                  {isSubmitting ? "Saving..." : editingContact ? "Save Changes" : "Save Contact"}
                 </button>
               </div>
             </form>

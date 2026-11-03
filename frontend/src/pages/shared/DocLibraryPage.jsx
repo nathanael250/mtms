@@ -281,7 +281,7 @@ export default function DocLibraryPage() {
         </div>
       ) : null}
 
-      <section className="rounded-[8px] border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="app-panel rounded-[8px] border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <h2 className="text-base font-bold text-slate-950">
@@ -354,7 +354,7 @@ export default function DocLibraryPage() {
               Back to folders
             </button>
 
-            <div className="overflow-x-auto rounded-[8px] border border-slate-200">
+            <div className="app-table-frame overflow-x-auto rounded-[8px] border border-slate-200">
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <tr>
@@ -448,7 +448,7 @@ export default function DocLibraryPage() {
                   key={category.id}
                   type="button"
                   onClick={() => setSelectedCategory(category)}
-                  className="group rounded-[8px] border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-[var(--brand-300)] hover:bg-blue-50/40 sm:p-4"
+                  className="app-panel group rounded-[8px] border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-[var(--brand-300)] hover:bg-blue-50/40 sm:p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-[8px] bg-blue-100 text-[var(--brand-700)] transition group-hover:bg-[var(--brand-600)] group-hover:text-white sm:h-12 sm:w-12">
@@ -467,7 +467,7 @@ export default function DocLibraryPage() {
                 </button>
               ))}
             {!categoryFolders.length ? (
-              <div className="rounded-[8px] border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+              <div className="app-panel rounded-[8px] border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
                 No document categories found.
               </div>
             ) : null}
@@ -477,7 +477,7 @@ export default function DocLibraryPage() {
 
       {isUploadOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[24px] border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="app-panel max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[24px] border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">

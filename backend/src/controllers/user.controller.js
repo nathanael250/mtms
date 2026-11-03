@@ -69,12 +69,21 @@ export const getUserById = asyncHandler(async (req, res) => {
 export const updateUser = asyncHandler(async (req, res) => {
   const { full_name, email, phone, password, role_id, status } = req.body;
   const [existing] = await getPool().query(
-    "SELECT id FROM users WHERE id = ? LIMIT 1",
+    "SELECT id, role_id FROM users WHERE id = ? LIMIT 1",
     [req.params.id]
   );
 
   if (!existing.length) {
     throw new ApiError(404, "User not found.");
+  }
+
+  if (Number(req.params.id) === req.user.id) {
+    if (status === "inactive") {
+      throw new ApiError(400, "You cannot deactivate your own account.");
+    }
+    if (role_id !== undefined && Number(role_id) !== existing[0].role_id) {
+      throw new ApiError(400, "You cannot change your own role.");
+    }
   }
 
   if (email) {

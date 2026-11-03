@@ -32,12 +32,12 @@ export default function ActivityLogsPage() {
         </div>
       ) : null}
 
-      <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="app-panel rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="space-y-4">
           {activityLogs.map((log) => (
             <div
               key={log.id}
-              className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
+              className="app-panel rounded-2xl border border-slate-100 bg-slate-50 p-4"
             >
               <p className="text-sm font-semibold text-slate-900">{log.action}</p>
               <p className="mt-2 text-sm text-slate-600">{log.description}</p>

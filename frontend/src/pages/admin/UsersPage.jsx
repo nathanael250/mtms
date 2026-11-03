@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, Plus, X } from "lucide-react";
+import { Eye, EyeOff, Pencil, Plus, X } from "lucide-react";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../lib/api";
@@ -10,10 +10,11 @@ const initialForm = {
   phone: "",
   password: "",
   role_id: "2",
+  status: "active",
 };
 
 export default function UsersPage() {
-  const { token } = useAuth();
+  const { token, user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const roles = [
     { id: 1, name: "admin" },
@@ -24,6 +25,7 @@ export default function UsersPage() {
   const [success, setSuccess] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
 
   async function loadUsers() {
     try {
@@ -44,24 +46,43 @@ export default function UsersPage() {
     setSuccess("");
 
     try {
-      await apiFetch("/users", {
-        method: "POST",
+      const body = { ...form, role_id: Number(form.role_id) };
+      if (editingUser && !body.password) {
+        delete body.password;
+      }
+
+      await apiFetch(editingUser ? `/users/${editingUser.id}` : "/users", {
+        method: editingUser ? "PUT" : "POST",
         token,
-        body: {
-          ...form,
-          role_id: Number(form.role_id),
-        },
+        body,
       });
-      setForm(initialForm);
-      setIsModalOpen(false);
-      setSuccess("User created successfully.");
+      closeModal();
+      setSuccess(
+        editingUser ? "User updated successfully." : "User created successfully."
+      );
       loadUsers();
     } catch (submitError) {
       setError(submitError.message);
     }
   }
 
+  function openEdit(user) {
+    setError("");
+    setSuccess("");
+    setEditingUser(user);
+    setForm({
+      full_name: user.full_name || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      password: "",
+      role_id: String(user.role_id),
+      status: user.status || "active",
+    });
+    setIsModalOpen(true);
+  }
+
   function closeModal() {
+    setEditingUser(null);
     setShowPassword(false);
     setIsModalOpen(false);
     setForm(initialForm);
@@ -86,6 +107,8 @@ export default function UsersPage() {
             onClick={() => {
               setError("");
               setSuccess("");
+              setEditingUser(null);
+              setForm(initialForm);
               setIsModalOpen(true);
             }}
             className="inline-flex items-center gap-2 rounded-2xl bg-[var(--brand-600)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[var(--brand-700)]"
@@ -107,7 +130,7 @@ export default function UsersPage() {
           </div>
         ) : null}
 
-        <section className="overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm md:rounded-[30px] md:p-6">
+        <section className="app-panel overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm md:rounded-[30px] md:p-6">
           <div className="divide-y divide-slate-100 md:hidden">
             {users.map((user) => (
               <article key={user.id} className="p-4">
@@ -124,7 +147,7 @@ export default function UsersPage() {
                     {user.role}
                   </span>
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3 text-xs">
+                <div className="app-panel mt-4 grid grid-cols-2 gap-3 rounded-2xl bg-slate-50 p-3 text-xs">
                   <div>
                     <p className="font-semibold uppercase tracking-[0.12em] text-slate-400">
                       Role
@@ -138,6 +161,14 @@ export default function UsersPage() {
                     <p className="mt-1 capitalize text-slate-700">{user.status}</p>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => openEdit(user)}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit
+                </button>
               </article>
             ))}
           </div>
@@ -150,6 +181,7 @@ export default function UsersPage() {
                   <th className="pb-3">Email</th>
                   <th className="pb-3">Role</th>
                   <th className="pb-3">Status</th>
+                  <th className="pb-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -161,6 +193,16 @@ export default function UsersPage() {
                     <td className="py-3 text-slate-600">{user.email}</td>
                     <td className="py-3 capitalize text-slate-600">{user.role}</td>
                     <td className="py-3 capitalize text-slate-600">{user.status}</td>
+                    <td className="py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(user)}
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Edit
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -171,14 +213,16 @@ export default function UsersPage() {
 
       {isModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4">
-          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[30px] border border-slate-200 bg-white p-6 shadow-2xl">
+          <div className="app-panel max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[30px] border border-slate-200 bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-slate-900">
-                  Create User
+                  {editingUser ? "Edit User" : "Create User"}
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Add a staff or admin account.
+                  {editingUser
+                    ? "Update this account. Leave the password blank to keep it unchanged."
+                    : "Add a staff or admin account."}
                 </p>
               </div>
               <button
@@ -200,6 +244,7 @@ export default function UsersPage() {
                 <label key={key} className="block">
                   <span className="mb-2 block text-sm font-medium text-slate-600">
                     {label}
+                    {editingUser && key === "password" ? " (optional)" : ""}
                   </span>
                   <div className="relative">
                     <input
@@ -210,6 +255,9 @@ export default function UsersPage() {
                           ...current,
                           [key]: event.target.value,
                         }))
+                      }
+                      placeholder={
+                        editingUser && key === "password" ? "Leave blank to keep current" : ""
                       }
                       className={`w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[var(--brand-500)] focus:bg-white ${
                         key === "password" ? "pr-12" : ""
@@ -239,6 +287,7 @@ export default function UsersPage() {
                 </span>
                 <select
                   value={form.role_id}
+                  disabled={editingUser?.id === currentUser?.id}
                   onChange={(event) =>
                     setForm((current) => ({
                       ...current,
@@ -253,6 +302,31 @@ export default function UsersPage() {
                     </option>
                   ))}
                 </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-slate-600">
+                  Status
+                </span>
+                <select
+                  value={form.status}
+                  disabled={editingUser?.id === currentUser?.id}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      status: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-[var(--brand-500)] focus:bg-white disabled:opacity-60"
+                >
+                  <option value="active">active</option>
+                  <option value="inactive">inactive</option>
+                </select>
+                {editingUser?.id === currentUser?.id ? (
+                  <span className="mt-1 block text-xs text-slate-500">
+                    You cannot change your own role or status.
+                  </span>
+                ) : null}
               </label>
 
               {error ? (
@@ -273,7 +347,7 @@ export default function UsersPage() {
                   type="submit"
                   className="rounded-2xl bg-[var(--brand-700)] px-5 py-3 text-sm font-semibold text-white"
                 >
-                  Save User
+                  {editingUser ? "Save Changes" : "Save User"}
                 </button>
               </div>
             </form>

@@ -1,8 +1,33 @@
 import { getPool } from "../config/database.js";
 import { createActivityLog } from "../services/activityLog.service.js";
-import { sendMentionNotifications } from "../services/notification.service.js";
+import fs from "fs/promises";
+import {
+  sendMentionNotifications,
+  sendMentionResolvedNotification,
+} from "../services/notification.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
+
+// Adds a `files` array (tag documents and resolution documents) to each mention row.
+async function withFiles(mentions) {
+  if (!mentions.length) {
+    return mentions;
+  }
+  const [files] = await getPool().query(
+    `SELECT mention_files.id, mention_files.mention_id, mention_files.stage,
+            mention_files.file_name, mention_files.file_path, mention_files.file_type,
+            mention_files.created_at, users.full_name AS uploaded_by_name
+     FROM mention_files
+     JOIN users ON users.id = mention_files.uploaded_by
+     WHERE mention_files.mention_id IN (?)
+     ORDER BY mention_files.id ASC`,
+    [mentions.map((mention) => mention.id)]
+  );
+  return mentions.map((mention) => ({
+    ...mention,
+    files: files.filter((file) => file.mention_id === mention.id),
+  }));
+}
 
 async function getMentionOrThrow(mentionId) {
   const [rows] = await getPool().query(
@@ -74,7 +99,7 @@ export const createMention = asyncHandler(async (req, res) => {
     message,
   });
 
-  const mention = await getMentionOrThrow(result.insertId);
+  const [mention] = await withFiles([await getMentionOrThrow(result.insertId)]);
   res.status(201).json({ message: "Mention created successfully.", mention });
 });
 
@@ -87,12 +112,20 @@ export const listMentions = asyncHandler(async (_req, res) => {
      JOIN users AS tagged ON tagged.id = mentions.mentioned_user_id
      ORDER BY mentions.id DESC`
   );
-  res.json({ mentions: rows });
+  res.json({ mentions: await withFiles(rows) });
 });
 
 export const getMentionById = asyncHandler(async (req, res) => {
   const mention = await getMentionOrThrow(req.params.id);
-  res.json({ mention });
+  if (
+    req.user.role !== "admin" &&
+    mention.mentioned_by !== req.user.id &&
+    mention.mentioned_user_id !== req.user.id
+  ) {
+    throw new ApiError(403, "You cannot view this mention.");
+  }
+  const [withDocuments] = await withFiles([mention]);
+  res.json({ mention: withDocuments });
 });
 
 export const getMyCreatedMentions = asyncHandler(async (req, res) => {
@@ -106,7 +139,7 @@ export const getMyCreatedMentions = asyncHandler(async (req, res) => {
      ORDER BY mentions.id DESC`,
     [req.user.id]
   );
-  res.json({ mentions: rows });
+  res.json({ mentions: await withFiles(rows) });
 });
 
 export const getMyMentions = asyncHandler(async (req, res) => {
@@ -120,7 +153,7 @@ export const getMyMentions = asyncHandler(async (req, res) => {
      ORDER BY mentions.id DESC`,
     [req.user.id]
   );
-  res.json({ mentions: rows });
+  res.json({ mentions: await withFiles(rows) });
 });
 
 async function transitionMention(req, res, nextStatus, actionName, verb) {
@@ -150,6 +183,112 @@ export const readMention = asyncHandler(async (req, res) =>
   transitionMention(req, res, "read", "mention_read", "read")
 );
 
-export const resolveMention = asyncHandler(async (req, res) =>
-  transitionMention(req, res, "resolved", "mention_resolved", "resolved")
-);
+export const resolveMention = asyncHandler(async (req, res) => {
+  const mention = await getMentionOrThrow(req.params.id);
+
+  if (req.user.role !== "admin" && mention.mentioned_user_id !== req.user.id) {
+    throw new ApiError(403, "You cannot update this mention.");
+  }
+  if (mention.status === "resolved") {
+    throw new ApiError(400, "This mention is already resolved.");
+  }
+
+  const resolutionMessage = String(req.body.message || "").trim();
+  if (resolutionMessage.length > 2000) {
+    throw new ApiError(400, "The resolution message is too long (maximum 2000 characters).");
+  }
+
+  await getPool().query(
+    `UPDATE report_mentions
+     SET status = 'resolved', resolution_message = ?, resolved_at = NOW()
+     WHERE id = ?`,
+    [resolutionMessage || null, mention.id]
+  );
+
+  await createActivityLog({
+    jobId: mention.job_id,
+    taskId: mention.task_id,
+    userId: req.user.id,
+    action: "mention_resolved",
+    description: `${req.user.full_name} resolved a report mention.`,
+  });
+
+  // Tell the person who tagged them, unless they resolved their own tag.
+  let whatsapp = "not_needed";
+  if (mention.mentioned_by !== req.user.id) {
+    try {
+      const [taggers] = await getPool().query(
+        "SELECT id, full_name, phone FROM users WHERE id = ? LIMIT 1",
+        [mention.mentioned_by]
+      );
+      const [[count]] = await getPool().query(
+        "SELECT COUNT(*) AS total FROM mention_files WHERE mention_id = ? AND stage = 'resolution'",
+        [mention.id]
+      );
+      const [[task]] = await getPool().query(
+        `SELECT tasks.title FROM task_daily_reports reports
+         JOIN tasks ON tasks.id = reports.task_id WHERE reports.id = ?`,
+        [mention.report_id]
+      );
+      whatsapp = await sendMentionResolvedNotification({
+        tagger: taggers[0],
+        resolverName: req.user.full_name,
+        taskTitle: task?.title || "a task",
+        originalMessage: mention.message,
+        resolutionMessage,
+        fileCount: Number(count.total),
+      });
+    } catch (error) {
+      console.error(`Mention resolved WhatsApp failed for mention ${mention.id}:`, error.message);
+      whatsapp = "failed";
+    }
+  }
+
+  const [updated] = await withFiles([await getMentionOrThrow(mention.id)]);
+  res.json({ message: "Mention resolved successfully.", whatsapp, mention: updated });
+});
+
+// The tagger attaches documents to the tag; the tagged person attaches documents to the
+// resolution. Both only while the mention is still open.
+export const uploadMentionFile = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    throw new ApiError(400, "A file is required.");
+  }
+
+  try {
+    const mention = await getMentionOrThrow(req.params.id);
+
+    let stage;
+    if (mention.mentioned_user_id === req.user.id) {
+      stage = "resolution";
+    } else if (mention.mentioned_by === req.user.id || req.user.role === "admin") {
+      stage = "tag";
+    } else {
+      throw new ApiError(403, "You cannot add documents to this mention.");
+    }
+    if (mention.status === "resolved") {
+      throw new ApiError(400, "This mention is already resolved.");
+    }
+
+    const relativePath = req.file.path.replace(`${process.cwd()}/`, "");
+    const [result] = await getPool().query(
+      `INSERT INTO mention_files (mention_id, stage, file_name, file_path, file_type, uploaded_by)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [mention.id, stage, req.file.originalname, relativePath, req.file.mimetype, req.user.id]
+    );
+
+    res.status(201).json({
+      message: "Document attached.",
+      file: {
+        id: result.insertId,
+        stage,
+        file_name: req.file.originalname,
+        file_path: relativePath,
+        file_type: req.file.mimetype,
+      },
+    });
+  } catch (error) {
+    await fs.unlink(req.file.path).catch(() => {});
+    throw error;
+  }
+});

@@ -1,0 +1,436 @@
+import { getPool } from "../config/database.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import { ApiError } from "../utils/apiError.js";
+import { sendDailyPlanReminders } from "../services/dailyReminder.service.js";
+import { getTodayYmd } from "../utils/today.js";
+import { sendPlanCommentNotification } from "../services/notification.service.js";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function toYmd(date) {
+  return date.toISOString().split("T")[0];
+}
+
+function parseYmd(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new ApiError(400, "Dates must use YYYY-MM-DD format.");
+  }
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) {
+    throw new ApiError(400, "Invalid date.");
+  }
+  return date;
+}
+
+// Defaults to the last 7 days ending today.
+function getRange(query) {
+  const to = query.to ? parseYmd(query.to) : parseYmd(toYmd(new Date()));
+  const from = query.from ? parseYmd(query.from) : new Date(to.getTime() - 6 * DAY_MS);
+
+  if (from > to) {
+    throw new ApiError(400, "Start date must not be after end date.");
+  }
+  if ((to - from) / DAY_MS > 366) {
+    throw new ApiError(400, "Date range cannot exceed one year.");
+  }
+
+  return { from: toYmd(from), to: toYmd(to), fromDate: from, toDate: to };
+}
+
+function countWorkingDays(fromDate, toDate) {
+  let count = 0;
+  for (let time = fromDate.getTime(); time <= toDate.getTime(); time += DAY_MS) {
+    const day = new Date(time).getUTCDay();
+    if (day !== 0 && day !== 6) count += 1;
+  }
+  return count;
+}
+
+function percent(part, whole) {
+  return whole ? Math.round((part / whole) * 100) : 0;
+}
+
+export const getActivityOverview = asyncHandler(async (req, res) => {
+  const { from, to, fromDate, toDate } = getRange(req.query);
+  const pool = getPool();
+
+  const [staff] = await pool.query(
+    `SELECT users.id, users.full_name, users.email
+     FROM users JOIN roles ON roles.id = users.role_id
+     WHERE roles.name = 'staff' AND users.status = 'active'
+     ORDER BY users.full_name ASC`
+  );
+
+  // A planned task counts as done when it is ticked itself or all of its to-dos are ticked.
+  const [planRows] = await pool.query(
+    `SELECT plans.user_id,
+            COUNT(*) AS planned,
+            SUM(plans.is_done) AS completed,
+            SUM(plans.is_done AND DATE(plans.done_at) > plans.created_date) AS completed_late,
+            COUNT(DISTINCT plans.created_date) AS days_planned,
+            DATE_FORMAT(MAX(plans.created_date), '%Y-%m-%d') AS last_planned_date
+     FROM (
+       SELECT task.user_id, task.created_date,
+              (task.is_completed = 1 OR (
+                 EXISTS (SELECT 1 FROM daily_tasks todo WHERE todo.parent_task_id = task.id)
+                 AND NOT EXISTS (
+                   SELECT 1 FROM daily_tasks todo
+                   WHERE todo.parent_task_id = task.id AND todo.is_completed = 0
+                 )
+              )) AS is_done,
+              COALESCE(
+                task.completed_at,
+                (SELECT MAX(todo.completed_at) FROM daily_tasks todo
+                 WHERE todo.parent_task_id = task.id)
+              ) AS done_at
+       FROM daily_tasks task
+       WHERE task.parent_task_id IS NULL AND task.created_date BETWEEN ? AND ?
+     ) AS plans
+     GROUP BY plans.user_id`,
+    [from, to]
+  );
+
+  const [todoRows] = await pool.query(
+    `SELECT user_id, COUNT(*) AS todo_total, SUM(is_completed = 1) AS todo_done
+     FROM daily_tasks
+     WHERE parent_task_id IS NOT NULL AND created_date BETWEEN ? AND ?
+     GROUP BY user_id`,
+    [from, to]
+  );
+
+  const [reportRows] = await pool.query(
+    `SELECT user_id, COUNT(*) AS reports_submitted
+     FROM task_daily_reports
+     WHERE report_date BETWEEN ? AND ?
+     GROUP BY user_id`,
+    [from, to]
+  );
+
+  const [jobTaskRows] = await pool.query(
+    `SELECT assigned_to AS user_id,
+            SUM(status IN ('assigned', 'ongoing')) AS job_tasks_active,
+            SUM(status = 'completed' AND DATE(completed_at) BETWEEN ? AND ?)
+              AS job_tasks_completed
+     FROM tasks
+     GROUP BY assigned_to`,
+    [from, to]
+  );
+
+  const plans = new Map(planRows.map((row) => [row.user_id, row]));
+  const todos = new Map(todoRows.map((row) => [row.user_id, row]));
+  const reports = new Map(reportRows.map((row) => [row.user_id, row]));
+  const jobTasks = new Map(jobTaskRows.map((row) => [row.user_id, row]));
+  const workingDays = countWorkingDays(fromDate, toDate);
+
+  const employees = staff.map((person) => {
+    const plan = plans.get(person.id);
+    const planned = Number(plan?.planned || 0);
+    const completed = Number(plan?.completed || 0);
+    const daysPlanned = Number(plan?.days_planned || 0);
+
+    return {
+      id: person.id,
+      full_name: person.full_name,
+      email: person.email,
+      planned,
+      completed,
+      completed_late: Number(plan?.completed_late || 0),
+      completion_rate: percent(completed, planned),
+      todo_total: Number(todos.get(person.id)?.todo_total || 0),
+      todo_done: Number(todos.get(person.id)?.todo_done || 0),
+      days_planned: daysPlanned,
+      activity_rate: Math.min(100, percent(daysPlanned, workingDays)),
+      last_planned_date: plan?.last_planned_date || null,
+      reports_submitted: Number(reports.get(person.id)?.reports_submitted || 0),
+      job_tasks_active: Number(jobTasks.get(person.id)?.job_tasks_active || 0),
+      job_tasks_completed: Number(jobTasks.get(person.id)?.job_tasks_completed || 0),
+    };
+  });
+
+  const totals = employees.reduce(
+    (sum, item) => ({
+      planned: sum.planned + item.planned,
+      completed: sum.completed + item.completed,
+      reports_submitted: sum.reports_submitted + item.reports_submitted,
+      no_activity: sum.no_activity + (item.days_planned === 0 ? 1 : 0),
+    }),
+    { planned: 0, completed: 0, reports_submitted: 0, no_activity: 0 }
+  );
+
+  res.json({
+    from,
+    to,
+    working_days: workingDays,
+    totals: { ...totals, completion_rate: percent(totals.completed, totals.planned) },
+    employees,
+  });
+});
+
+export const getEmployeeActivity = asyncHandler(async (req, res) => {
+  const { from, to } = getRange(req.query);
+  const pool = getPool();
+
+  const [users] = await pool.query(
+    `SELECT users.id, users.full_name, users.email, users.phone, roles.name AS role
+     FROM users JOIN roles ON roles.id = users.role_id
+     WHERE users.id = ? LIMIT 1`,
+    [req.params.userId]
+  );
+  if (!users.length) {
+    throw new ApiError(404, "Employee not found.");
+  }
+
+  const [rows] = await pool.query(
+    `SELECT id, parent_task_id, description, planned_time, is_completed,
+            completed_at, DATE_FORMAT(created_date, '%Y-%m-%d') AS created_date
+     FROM daily_tasks
+     WHERE user_id = ? AND created_date BETWEEN ? AND ?
+     ORDER BY created_date DESC, id ASC`,
+    [req.params.userId, from, to]
+  );
+
+  const [comments] = await pool.query(
+    `SELECT daily_task_comments.id, daily_task_comments.daily_task_id,
+            DATE_FORMAT(daily_task_comments.plan_date, '%Y-%m-%d') AS plan_date,
+            daily_task_comments.message, daily_task_comments.whatsapp_status,
+            daily_task_comments.created_at, users.full_name AS author_name
+     FROM daily_task_comments
+     JOIN users ON users.id = daily_task_comments.author_id
+     WHERE daily_task_comments.employee_id = ?
+       AND daily_task_comments.plan_date BETWEEN ? AND ?
+     ORDER BY daily_task_comments.id ASC`,
+    [req.params.userId, from, to]
+  );
+
+  const [dayReports] = await pool.query(
+    `SELECT DATE_FORMAT(report_date, '%Y-%m-%d') AS report_date,
+            summary, submitted_at, updated_at
+     FROM daily_day_reports
+     WHERE user_id = ? AND report_date BETWEEN ? AND ?`,
+    [req.params.userId, from, to]
+  );
+
+  const [unlocks] = await pool.query(
+    `SELECT DATE_FORMAT(plan_date, '%Y-%m-%d') AS plan_date
+     FROM daily_day_unlocks WHERE user_id = ? ORDER BY plan_date DESC`,
+    [req.params.userId]
+  );
+  const unlockedDates = new Set(unlocks.map((row) => row.plan_date));
+
+  const [dayFiles] = await pool.query(
+    `SELECT id, DATE_FORMAT(report_date, '%Y-%m-%d') AS report_date,
+            file_name, file_path, file_type, created_at
+     FROM daily_day_report_files
+     WHERE user_id = ? AND report_date BETWEEN ? AND ?
+     ORDER BY id ASC`,
+    [req.params.userId, from, to]
+  );
+
+  const todosByParent = new Map();
+  rows
+    .filter((row) => row.parent_task_id)
+    .forEach((row) => {
+      const list = todosByParent.get(row.parent_task_id) || [];
+      list.push(row);
+      todosByParent.set(row.parent_task_id, list);
+    });
+
+  const days = new Map();
+  const getDay = (date) => {
+    if (!days.has(date)) {
+      days.set(date, {
+        date,
+        tasks: [],
+        day_comments: [],
+        day_report: null,
+        files: [],
+        unlocked: unlockedDates.has(date),
+      });
+    }
+    return days.get(date);
+  };
+
+  rows
+    .filter((row) => !row.parent_task_id)
+    .forEach((row) => {
+      const todoItems = todosByParent.get(row.id) || [];
+      const isDone =
+        Boolean(row.is_completed) ||
+        (todoItems.length > 0 && todoItems.every((item) => item.is_completed));
+      getDay(row.created_date).tasks.push({
+        ...row,
+        is_done: isDone,
+        todo_items: todoItems,
+        comments: comments.filter((comment) => comment.daily_task_id === row.id),
+      });
+    });
+
+  comments
+    .filter((comment) => !comment.daily_task_id)
+    .forEach((comment) => getDay(comment.plan_date).day_comments.push(comment));
+  dayReports.forEach((report) => {
+    getDay(report.report_date).day_report = report;
+  });
+  dayFiles.forEach((file) => getDay(file.report_date).files.push(file));
+
+  // An unlocked day is shown even when it has no entries yet.
+  unlockedDates.forEach((date) => {
+    if (date >= from && date <= to) getDay(date);
+  });
+
+  const [reports] = await pool.query(
+    `SELECT task_daily_reports.id,
+            DATE_FORMAT(report_date, '%Y-%m-%d') AS report_date,
+            activity_done, tasks.title AS task_title, jobs.title AS job_title
+     FROM task_daily_reports
+     JOIN tasks ON tasks.id = task_daily_reports.task_id
+     JOIN jobs ON jobs.id = tasks.job_id
+     WHERE task_daily_reports.user_id = ? AND report_date BETWEEN ? AND ?
+     ORDER BY report_date DESC, task_daily_reports.id DESC
+     LIMIT 100`,
+    [req.params.userId, from, to]
+  );
+
+  res.json({
+    from,
+    to,
+    employee: users[0],
+    unlocked_days: [...unlockedDates],
+    today: getTodayYmd(),
+    days: [...days.values()].sort((a, b) => b.date.localeCompare(a.date)),
+    reports,
+  });
+});
+
+export const addEmployeeComment = asyncHandler(async (req, res) => {
+  const pool = getPool();
+  const message = String(req.body.message || "").trim();
+
+  if (!message) {
+    throw new ApiError(400, "Comment cannot be empty.");
+  }
+  if (message.length > 1000) {
+    throw new ApiError(400, "Comment is too long (maximum 1000 characters).");
+  }
+
+  const [users] = await pool.query(
+    "SELECT id, full_name, phone FROM users WHERE id = ? LIMIT 1",
+    [req.params.userId]
+  );
+  if (!users.length) {
+    throw new ApiError(404, "Employee not found.");
+  }
+  const employee = users[0];
+
+  let planDate;
+  let taskId = null;
+  let taskDescription = null;
+
+  if (req.body.daily_task_id) {
+    const [tasks] = await pool.query(
+      `SELECT id, description, DATE_FORMAT(created_date, '%Y-%m-%d') AS created_date
+       FROM daily_tasks WHERE id = ? AND user_id = ? AND parent_task_id IS NULL`,
+      [req.body.daily_task_id, employee.id]
+    );
+    if (!tasks.length) {
+      throw new ApiError(404, "Planned task not found for this employee.");
+    }
+    taskId = tasks[0].id;
+    taskDescription = tasks[0].description;
+    planDate = tasks[0].created_date;
+  } else {
+    planDate = toYmd(parseYmd(String(req.body.date || "")));
+  }
+
+  const [result] = await pool.query(
+    `INSERT INTO daily_task_comments (employee_id, daily_task_id, plan_date, author_id, message)
+     VALUES (?, ?, ?, ?, ?)`,
+    [employee.id, taskId, planDate, req.user.id, message]
+  );
+
+  let whatsappStatus;
+  try {
+    whatsappStatus = await sendPlanCommentNotification({
+      employee,
+      authorName: req.user.full_name,
+      planDate,
+      taskDescription,
+      message,
+    });
+  } catch (error) {
+    console.error(`Plan comment WhatsApp failed for user ${employee.id}:`, error.message);
+    whatsappStatus = "failed";
+  }
+
+  await pool.query("UPDATE daily_task_comments SET whatsapp_status = ? WHERE id = ?", [
+    whatsappStatus,
+    result.insertId,
+  ]);
+
+  const [rows] = await pool.query(
+    `SELECT daily_task_comments.id, daily_task_comments.daily_task_id,
+            DATE_FORMAT(daily_task_comments.plan_date, '%Y-%m-%d') AS plan_date,
+            daily_task_comments.message, daily_task_comments.whatsapp_status,
+            daily_task_comments.created_at, users.full_name AS author_name
+     FROM daily_task_comments
+     JOIN users ON users.id = daily_task_comments.author_id
+     WHERE daily_task_comments.id = ?`,
+    [result.insertId]
+  );
+
+  res.status(201).json({ message: "Comment saved.", comment: rows[0] });
+});
+
+export const deleteEmployeeComment = asyncHandler(async (req, res) => {
+  const [result] = await getPool().query("DELETE FROM daily_task_comments WHERE id = ?", [
+    req.params.id,
+  ]);
+  if (!result.affectedRows) {
+    throw new ApiError(404, "Comment not found.");
+  }
+  res.json({ message: "Comment deleted." });
+});
+
+export const sendPlanReminders = asyncHandler(async (req, res) => {
+  const result = await sendDailyPlanReminders({
+    dryRun: req.body?.dry_run === true,
+    skipDedupe: true,
+  });
+  res.json(result);
+});
+
+export const unlockEmployeeDay = asyncHandler(async (req, res) => {
+  const pool = getPool();
+  const date = toYmd(parseYmd(String(req.body.date || "")));
+
+  if (date >= getTodayYmd()) {
+    throw new ApiError(400, "Only past days can be unlocked. Today is already open.");
+  }
+
+  const [users] = await pool.query("SELECT id FROM users WHERE id = ? LIMIT 1", [
+    req.params.userId,
+  ]);
+  if (!users.length) {
+    throw new ApiError(404, "Employee not found.");
+  }
+
+  await pool.query(
+    `INSERT IGNORE INTO daily_day_unlocks (user_id, plan_date, unlocked_by)
+     VALUES (?, ?, ?)`,
+    [req.params.userId, date, req.user.id]
+  );
+
+  res.status(201).json({ message: "Day unlocked.", date });
+});
+
+export const lockEmployeeDay = asyncHandler(async (req, res) => {
+  const date = toYmd(parseYmd(String(req.params.date || "")));
+  const [result] = await getPool().query(
+    "DELETE FROM daily_day_unlocks WHERE user_id = ? AND plan_date = ?",
+    [req.params.userId, date]
+  );
+  if (!result.affectedRows) {
+    throw new ApiError(404, "That day was not unlocked.");
+  }
+  res.json({ message: "Day locked again.", date });
+});

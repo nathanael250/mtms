@@ -11,6 +11,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import DashboardLayout from "../../components/DashboardLayout";
+import DashboardStatCard from "../../components/DashboardStatCard";
 import { apiFetch } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 
@@ -30,31 +31,6 @@ function formatDate(value, withTime = false) {
         }
       : {}),
   }).format(new Date(value));
-}
-
-function StatCard({ icon: Icon, label, value, hint, tone }) {
-  return (
-    <div className="rounded-[18px] border border-slate-200 bg-white p-4 shadow-sm sm:rounded-[26px] sm:p-6">
-      <div className="grid gap-3 sm:grid-cols-[72px_minmax(0,1fr)] sm:items-center sm:gap-4">
-        <div
-          className={`flex h-11 w-11 items-center justify-center rounded-full sm:h-16 sm:w-16 ${tone.bg}`}
-        >
-          <Icon className={`h-5 w-5 sm:h-7 sm:w-7 ${tone.text}`} />
-        </div>
-        <div className="min-w-0">
-          <p className="text-[12px] font-semibold leading-tight text-slate-700 sm:text-base">
-            {label}
-          </p>
-          <p className="mt-2 text-[30px] font-bold leading-none tracking-tight text-slate-900 sm:text-[42px]">
-            {value ?? 0}
-          </p>
-          <p className="mt-2 text-[12px] leading-tight text-slate-400 sm:text-base">
-            {hint}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function SmallBadge({ children, tone = "blue" }) {
@@ -201,7 +177,7 @@ function TaskCalendar({ tasks }) {
   }).format(new Date(selectedDateKey || todayKey));
 
   return (
-    <section className="relative rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="app-panel relative rounded-none border border-slate-200 border-t-2 border-t-green-500 bg-white p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-[18px] font-semibold text-slate-900">
@@ -304,7 +280,7 @@ function TaskCalendar({ tasks }) {
         })}
 
         {selectedDate ? (
-          <div className="absolute left-1/2 top-1/2 z-20 w-[min(520px,calc(100%-16px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
+          <div className="app-panel absolute left-1/2 top-1/2 z-20 w-[min(520px,calc(100%-16px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-slate-900">
@@ -325,7 +301,7 @@ function TaskCalendar({ tasks }) {
             </div>
             <div className="mt-3 grid max-h-[220px] gap-2 overflow-y-auto">
               {selectedTasks.map((task) => (
-                <div key={task.id} className="rounded-xl bg-slate-50 p-3">
+                <div key={task.id} className="app-panel rounded-xl bg-slate-50 p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-900">
@@ -476,34 +452,34 @@ export default function AdminDashboardPage() {
       ) : null}
 
       <div className="space-y-5">
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-          <StatCard
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <DashboardStatCard
             icon={BriefcaseBusiness}
             label="Total Jobs"
             value={stats.total_jobs}
             hint="All time"
-            tone={{ bg: "bg-[var(--brand-100)]", text: "text-[var(--brand-700)]" }}
+            tone="blue"
           />
-          <StatCard
+          <DashboardStatCard
             icon={TrendingUp}
             label="Ongoing Jobs"
             value={stats.ongoing_jobs}
             hint="In progress"
-            tone={{ bg: "bg-emerald-50", text: "text-emerald-600" }}
+            tone="purple"
           />
-          <StatCard
+          <DashboardStatCard
             icon={Clock3}
             label="Pending Approval"
             value={stats.jobs_pending_approval}
             hint="Needs your action"
-            tone={{ bg: "bg-amber-50", text: "text-amber-600" }}
+            tone="rose"
           />
-          <StatCard
+          <DashboardStatCard
             icon={CheckCheck}
             label="Completed Jobs"
             value={stats.completed_jobs}
             hint="Approved"
-            tone={{ bg: "bg-violet-50", text: "text-violet-600" }}
+            tone="cyan"
           />
         </div>
 
@@ -511,7 +487,7 @@ export default function AdminDashboardPage() {
           <TaskCalendar tasks={tasks} />
 
           <div className="space-y-5">
-            <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <section className="app-panel rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between">
                 <h2 className="text-[18px] font-semibold text-slate-900">
                   Jobs Pending Approval
@@ -524,7 +500,7 @@ export default function AdminDashboardPage() {
                 {view.pendingApprovals.map((job) => (
                   <div
                     key={job.id}
-                    className="flex items-start gap-4 rounded-2xl border border-slate-100 bg-slate-50 p-4"
+                    className="app-panel flex items-start gap-4 rounded-2xl border border-slate-100 bg-slate-50 p-4"
                   >
                     <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#244974] to-[#3f74b7] text-white">
                       <BriefcaseBusiness className="h-6 w-6" />
@@ -570,7 +546,7 @@ export default function AdminDashboardPage() {
               </div>
             </section>
 
-            <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <section className="app-panel rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <h2 className="text-[18px] font-semibold text-slate-900">
@@ -606,7 +582,7 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-          <section className="rounded-[28px] border border-slate-200 bg-white shadow-sm">
+          <section className="app-panel rounded-[28px] border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between px-5 py-5">
               <h2 className="text-[18px] font-semibold text-slate-900">
                 Recent Reports
@@ -643,7 +619,7 @@ export default function AdminDashboardPage() {
             </div>
           </section>
 
-          <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="app-panel rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <h2 className="text-[18px] font-semibold text-slate-900">
                 Recent Activity

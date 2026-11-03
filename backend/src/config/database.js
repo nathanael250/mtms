@@ -246,6 +246,118 @@ async function ensureReportTemplateSchema() {
   }
 }
 
+async function ensureReminderSchema() {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS reminder_logs (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      reminder_type VARCHAR(50) NOT NULL,
+      reminder_date DATE NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_reminder_user_type_date (user_id, reminder_type, reminder_date),
+      CONSTRAINT fk_reminder_logs_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE
+    )`
+  );
+}
+
+async function ensureMentionFilesSchema() {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS mention_files (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      mention_id BIGINT NOT NULL,
+      stage ENUM('tag', 'resolution') NOT NULL,
+      file_name VARCHAR(255) NOT NULL,
+      file_path VARCHAR(500) NOT NULL,
+      file_type VARCHAR(100) NULL,
+      uploaded_by BIGINT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_mention_files_mention (mention_id),
+      CONSTRAINT fk_mention_files_mention
+        FOREIGN KEY (mention_id) REFERENCES report_mentions(id) ON DELETE CASCADE,
+      CONSTRAINT fk_mention_files_user
+        FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE CASCADE
+    )`
+  );
+
+  for (const statement of [
+    "ALTER TABLE report_mentions ADD COLUMN resolution_message TEXT NULL",
+    "ALTER TABLE report_mentions ADD COLUMN resolved_at DATETIME NULL",
+  ]) {
+    try {
+      await pool.query(statement);
+    } catch (error) {
+      if (error.code !== "ER_DUP_FIELDNAME") {
+        throw error;
+      }
+    }
+  }
+}
+
+async function ensureDailyPlanFeedbackSchema() {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS daily_task_comments (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      employee_id BIGINT NOT NULL,
+      daily_task_id BIGINT NULL,
+      plan_date DATE NOT NULL,
+      author_id BIGINT NOT NULL,
+      message TEXT NOT NULL,
+      whatsapp_status VARCHAR(20) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_daily_task_comments_employee_date (employee_id, plan_date),
+      CONSTRAINT fk_daily_task_comments_employee
+        FOREIGN KEY (employee_id) REFERENCES users(id) ON DELETE CASCADE,
+      CONSTRAINT fk_daily_task_comments_task
+        FOREIGN KEY (daily_task_id) REFERENCES daily_tasks(id) ON DELETE CASCADE,
+      CONSTRAINT fk_daily_task_comments_author
+        FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE
+    )`
+  );
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS daily_day_unlocks (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      plan_date DATE NOT NULL,
+      unlocked_by BIGINT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_daily_day_unlocks_user_date (user_id, plan_date),
+      CONSTRAINT fk_daily_day_unlocks_user
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      CONSTRAINT fk_daily_day_unlocks_admin
+        FOREIGN KEY (unlocked_by) REFERENCES users(id) ON DELETE CASCADE
+    )`
+  );
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS daily_day_report_files (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      report_date DATE NOT NULL,
+      file_name VARCHAR(255) NOT NULL,
+      file_path VARCHAR(500) NOT NULL,
+      file_type VARCHAR(100) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_daily_day_report_files_user_date (user_id, report_date),
+      CONSTRAINT fk_daily_day_report_files_user
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`
+  );
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS daily_day_reports (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      report_date DATE NOT NULL,
+      summary TEXT NOT NULL,
+      submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_daily_day_reports_user_date (user_id, report_date),
+      CONSTRAINT fk_daily_day_reports_user
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`
+  );
+}
+
 export async function initializeDatabase() {
   if (env.initDbOnStart) {
     await runSchema();
@@ -268,6 +380,9 @@ export async function initializeDatabase() {
   await ensureDocumentLibrarySchema();
   await ensureDailyTaskSchema();
   await ensureReportTemplateSchema();
+  await ensureReminderSchema();
+  await ensureDailyPlanFeedbackSchema();
+  await ensureMentionFilesSchema();
 
   if (env.seedAdminOnStart) {
     await seedDefaultAdmin();

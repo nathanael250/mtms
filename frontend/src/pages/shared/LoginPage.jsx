@@ -29,7 +29,7 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[var(--page-bg)] px-4 py-10">
-      <div className="grid w-full max-w-5xl overflow-hidden rounded-[32px] border border-[var(--brand-200)] bg-white shadow-[0_25px_60px_rgba(50,142,255,0.12)] lg:grid-cols-[1.05fr_0.95fr]">
+      <div className="app-panel grid w-full max-w-5xl overflow-hidden rounded-[32px] border border-[var(--brand-200)] bg-white shadow-[0_25px_60px_rgba(50,142,255,0.12)] lg:grid-cols-[1.05fr_0.95fr]">
         <section className="hidden bg-[linear-gradient(180deg,var(--brand-700)_0%,var(--brand-600)_100%)] p-10 text-white lg:flex lg:flex-col lg:justify-between">
           <div>
             <img

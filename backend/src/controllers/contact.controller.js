@@ -111,7 +111,21 @@ export const getContactById = asyncHandler(async (req, res) => {
 });
 
 export const updateContact = asyncHandler(async (req, res) => {
-  await getContactOrThrow(req.params.id);
+  const existing = await getContactOrThrow(req.params.id);
+
+  if (req.user.role !== "admin" && existing.created_by !== req.user.id) {
+    throw new ApiError(403, "You can only edit contacts you created.");
+  }
+
+  const categoryId = req.body.category_id ?? existing.category_id;
+  const customCategory =
+    req.body.custom_category !== undefined
+      ? req.body.custom_category
+      : existing.custom_category;
+  if (Number(categoryId) === 7 && !customCategory) {
+    throw new ApiError(422, "Custom category is required when category is other.");
+  }
+
   const updates = [];
   const values = [];
 

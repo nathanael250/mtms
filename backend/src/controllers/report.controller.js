@@ -20,6 +20,24 @@ async function getReportOrThrow(reportId) {
   return rows[0];
 }
 
+// Adds an `attachments` array to each report row.
+async function withAttachments(reports) {
+  if (!reports.length) {
+    return reports;
+  }
+  const [files] = await getPool().query(
+    `SELECT id, related_id, file_name, file_path, file_type
+     FROM attachments
+     WHERE related_type = 'report' AND related_id IN (?)
+     ORDER BY id ASC`,
+    [reports.map((report) => report.id)]
+  );
+  return reports.map((report) => ({
+    ...report,
+    attachments: files.filter((file) => file.related_id === report.id),
+  }));
+}
+
 export const createReport = asyncHandler(async (req, res) => {
   const {
     task_id,
@@ -128,7 +146,7 @@ export const listReports = asyncHandler(async (req, res) => {
     values
   );
 
-  res.json({ reports: rows });
+  res.json({ reports: await withAttachments(rows) });
 });
 
 export const getReportById = asyncHandler(async (req, res) => {
@@ -163,7 +181,7 @@ export const getReportsByTask = asyncHandler(async (req, res) => {
     [req.params.id]
   );
 
-  res.json({ reports: rows });
+  res.json({ reports: await withAttachments(rows) });
 });
 
 export const getReportsByJob = asyncHandler(async (req, res) => {
@@ -177,7 +195,7 @@ export const getReportsByJob = asyncHandler(async (req, res) => {
     [req.params.id]
   );
 
-  res.json({ reports: rows });
+  res.json({ reports: await withAttachments(rows) });
 });
 
 export const updateReport = asyncHandler(async (req, res) => {

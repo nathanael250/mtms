@@ -10,6 +10,18 @@ export const uploadAttachment = asyncHandler(async (req, res) => {
   }
 
   const { related_type, related_id } = req.body;
+
+  if (related_type === "report" && req.user.role !== "admin") {
+    const [owners] = await getPool().query(
+      "SELECT user_id FROM task_daily_reports WHERE id = ? LIMIT 1",
+      [related_id]
+    );
+    if (!owners.length || owners[0].user_id !== req.user.id) {
+      await fs.unlink(req.file.path).catch(() => {});
+      throw new ApiError(403, "You can only attach files to your own report.");
+    }
+  }
+
   const relativePath = req.file.path.replace(`${process.cwd()}/`, "");
 
   const [result] = await getPool().query(

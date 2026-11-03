@@ -93,7 +93,7 @@ export default function DocumentCategoriesPage() {
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <section className="rounded-[8px] border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="app-panel rounded-[8px] border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-base font-bold text-slate-950">
             {editingId ? "Edit Category" : "New Category"}
           </h2>
@@ -150,11 +150,11 @@ export default function DocumentCategoriesPage() {
           </form>
         </section>
 
-        <section className="rounded-[8px] border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="app-panel rounded-[8px] border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-base font-bold text-slate-950">
             Document Categories
           </h2>
-          <div className="mt-5 overflow-x-auto rounded-[8px] border border-slate-200">
+          <div className="app-table-frame mt-5 overflow-x-auto rounded-[8px] border border-slate-200">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                 <tr>

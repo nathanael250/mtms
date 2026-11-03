@@ -38,3 +38,27 @@ button,
 input {
   font: inherit;
 }
+
+/* Shared box treatment for application cards, panels, dialogs, and table containers. */
+.app-panel,
+.app-panel:hover,
+.app-panel:focus-visible {
+  border: 1px solid #e2e8f0;
+  border-top: 2px solid #22c55e;
+  border-radius: 0;
+  background-color: #fff;
+  box-shadow: none;
+}
+
+/* Nested table frames retain their separator without adding a second green edge. */
+.app-table-frame {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Only outer panels carry the green accent; nested boxes use a plain border. */
+.app-panel .app-panel,
+.app-panel .app-panel:hover,
+.app-panel .app-panel:focus-visible {
+  border-top: 1px solid #e2e8f0;
+}
