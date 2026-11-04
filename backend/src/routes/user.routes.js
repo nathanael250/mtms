@@ -5,6 +5,7 @@ import {
   getUserById,
   listStaff,
   listUsers,
+  sendCredentials,
   updateUser,
 } from "../controllers/user.controller.js";
 import { authenticate, authorizeRoles } from "../middlewares/auth.middleware.js";
@@ -22,6 +23,7 @@ router.get("/", authorizeRoles("admin"), listUsers);
 router.post("/", authorizeRoles("admin"), createUserValidator, validateRequest, createUser);
 router.get("/:id", authorizeRoles("admin"), getUserById);
 router.put("/:id", authorizeRoles("admin"), updateUserValidator, validateRequest, updateUser);
+router.post("/:id/send-credentials", authorizeRoles("admin"), sendCredentials);
 router.delete("/:id", authorizeRoles("admin"), deleteUser);
 
 export default router;

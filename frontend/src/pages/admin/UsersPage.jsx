@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, Pencil, Plus, X } from "lucide-react";
+import { Eye, EyeOff, MessageCircle, Pencil, Plus, X } from "lucide-react";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../lib/api";
@@ -26,6 +26,7 @@ export default function UsersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [sendingId, setSendingId] = useState(null);
 
   async function loadUsers() {
     try {
@@ -64,6 +65,47 @@ export default function UsersPage() {
     } catch (submitError) {
       setError(submitError.message);
     }
+  }
+
+  async function handleSendCredentials(user) {
+    const ok = window.confirm(
+      `Send login details to ${user.full_name} on WhatsApp?\n\nThis resets their password to their second name + the last 4 digits of their phone number.`
+    );
+    if (!ok) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    setSendingId(user.id);
+    try {
+      const data = await apiFetch(`/users/${user.id}/send-credentials`, {
+        method: "POST",
+        token,
+      });
+      setSuccess(data.message);
+    } catch (sendError) {
+      setError(sendError.message);
+    } finally {
+      setSendingId(null);
+    }
+  }
+
+  function renderSendButton(user) {
+    if (user.id === currentUser?.id) {
+      return null;
+    }
+    return (
+      <button
+        type="button"
+        onClick={() => handleSendCredentials(user)}
+        disabled={sendingId === user.id}
+        className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+      >
+        <MessageCircle className="h-3.5 w-3.5" />
+        {sendingId === user.id ? "Sending..." : "Send login"}
+      </button>
+    );
   }
 
   function openEdit(user) {
@@ -161,14 +203,17 @@ export default function UsersPage() {
                     <p className="mt-1 capitalize text-slate-700">{user.status}</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => openEdit(user)}
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                  Edit
-                </button>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(user)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit
+                  </button>
+                  {renderSendButton(user)}
+                </div>
               </article>
             ))}
           </div>
@@ -193,15 +238,18 @@ export default function UsersPage() {
                     <td className="py-3 text-slate-600">{user.email}</td>
                     <td className="py-3 capitalize text-slate-600">{user.role}</td>
                     <td className="py-3 capitalize text-slate-600">{user.status}</td>
-                    <td className="py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => openEdit(user)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                        Edit
-                      </button>
+                    <td className="py-3">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(user)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Edit
+                        </button>
+                        {renderSendButton(user)}
+                      </div>
                     </td>
                   </tr>
                 ))}

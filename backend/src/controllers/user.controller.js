@@ -2,6 +2,21 @@ import bcrypt from "bcryptjs";
 import { getPool } from "../config/database.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
+import { env } from "../config/env.js";
+import { sendCredentialsNotification } from "../services/notification.service.js";
+
+// Password rule: second name + last digits of the phone number.
+const CREDENTIAL_PHONE_DIGITS = 4;
+
+export function buildCredentialPassword(fullName, phone) {
+  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
+  const secondName = parts[1] || parts[0] || "";
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (!secondName || digits.length < CREDENTIAL_PHONE_DIGITS) {
+    return "";
+  }
+  return `${secondName}${digits.slice(-CREDENTIAL_PHONE_DIGITS)}`;
+}
 
 const baseUserSelect = `
   SELECT users.id, users.role_id, roles.name AS role, users.full_name, users.email,
@@ -160,3 +175,58 @@ export const deleteUser = asyncHandler(async (req, res) => {
   res.json({ message: "User deleted successfully." });
 });
 
+
+export const sendCredentials = asyncHandler(async (req, res) => {
+  const [rows] = await getPool().query(
+    "SELECT id, full_name, email, phone, status FROM users WHERE id = ? LIMIT 1",
+    [req.params.id]
+  );
+  const target = rows[0];
+
+  if (!target) {
+    throw new ApiError(404, "User not found.");
+  }
+  if (target.id === req.user.id) {
+    throw new ApiError(400, "You cannot reset your own password this way.");
+  }
+  if (!target.phone) {
+    throw new ApiError(400, "This user has no phone number. Add one first.");
+  }
+
+  const password = buildCredentialPassword(target.full_name, target.phone);
+  if (!password) {
+    throw new ApiError(
+      400,
+      `The phone number needs at least ${CREDENTIAL_PHONE_DIGITS} digits to build the password.`
+    );
+  }
+
+  // Send first: the password is only changed once the message was delivered.
+  let status;
+  try {
+    status = await sendCredentialsNotification({
+      user: target,
+      password,
+      loginUrl: env.loginUrl,
+    });
+  } catch (error) {
+    console.error("Credentials WhatsApp failed:", error.message);
+    throw new ApiError(
+      502,
+      "WhatsApp message could not be sent. The password was not changed."
+    );
+  }
+  if (status === "disabled") {
+    throw new ApiError(
+      400,
+      "WhatsApp notifications are disabled. The password was not changed."
+    );
+  }
+
+  await getPool().query("UPDATE users SET password = ? WHERE id = ?", [
+    await bcrypt.hash(password, 10),
+    target.id,
+  ]);
+
+  res.json({ message: `Login details sent to ${target.full_name} on WhatsApp.` });
+});

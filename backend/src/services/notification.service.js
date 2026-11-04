@@ -245,3 +245,20 @@ export async function sendMentionResolvedNotification({
   const result = await sendWhatsapp({ to: tagger.phone, text: lines.join("\n") });
   return result.skipped ? "disabled" : "sent";
 }
+
+// Throws if WhatsApp delivery fails. Returns "disabled" when WhatsApp is off.
+export async function sendCredentialsNotification({ user, password, loginUrl }) {
+  const firstName = String(user.full_name || "").trim().split(/\s+/)[0] || "there";
+  const text = [
+    `Hello ${firstName},`,
+    "",
+    "Your MOPAS account is ready. Use these details to sign in:",
+    "",
+    `Link: ${loginUrl}`,
+    `Email: ${user.email}`,
+    `Password: ${password}`,
+  ].join("\n");
+
+  const result = await sendWhatsapp({ to: user.phone, text });
+  return result.skipped ? "disabled" : "sent";
+}
