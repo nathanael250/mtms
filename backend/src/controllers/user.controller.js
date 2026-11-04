@@ -6,7 +6,7 @@ import { env } from "../config/env.js";
 import { sendCredentialsNotification } from "../services/notification.service.js";
 
 // Password rule: second name + last digits of the phone number.
-const CREDENTIAL_PHONE_DIGITS = 4;
+const CREDENTIAL_PHONE_DIGITS = 3;
 
 export function buildCredentialPassword(fullName, phone) {
   const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);

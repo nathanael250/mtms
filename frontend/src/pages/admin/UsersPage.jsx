@@ -69,7 +69,7 @@ export default function UsersPage() {
 
   async function handleSendCredentials(user) {
     const ok = window.confirm(
-      `Send login details to ${user.full_name} on WhatsApp?\n\nThis resets their password to their second name + the last 4 digits of their phone number.`
+      `Send login details to ${user.full_name} on WhatsApp?\n\nThis resets their password to their second name + the last 3 digits of their phone number.`
     );
     if (!ok) {
       return;
