@@ -185,9 +185,19 @@ export async function sendPlanCommentNotification({
   planDate,
   taskDescription,
   message,
+  direct = false,
 }) {
   if (!employee.phone) {
     return "no_phone";
+  }
+
+  if (direct) {
+    const name = String(employee.full_name || "").trim().split(/\s+/)[0] || "there";
+    const result = await sendWhatsapp({
+      to: employee.phone,
+      text: [`Hello ${name},`, "", message, "", `- ${authorName} (MOPAS)`].join("\n"),
+    });
+    return result.skipped ? "disabled" : "sent";
   }
 
   const dateLabel = new Intl.DateTimeFormat("en-GB", {

@@ -126,6 +126,68 @@ function CommentList({ comments, onDelete }) {
   );
 }
 
+function MessagePanel({ employee, onSend }) {
+  const [message, setMessage] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+
+  async function submit() {
+    if (!message.trim()) return;
+    setIsSending(true);
+    setFeedback(null);
+    try {
+      await onSend(message.trim());
+      setMessage("");
+      setFeedback({
+        ok: true,
+        text: employee.phone
+          ? `Message sent to ${employee.full_name} on WhatsApp.`
+          : "Message saved, but there is no phone number so it did not reach WhatsApp.",
+      });
+    } catch (sendError) {
+      setFeedback({ ok: false, text: sendError.message });
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  return (
+    <section className="app-panel rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+        <MessageSquare className="h-4 w-4 text-emerald-600" />
+        Send a message to {employee.full_name}
+      </h3>
+      <p className="mt-1 text-xs text-slate-500">
+        This goes straight to their WhatsApp and is saved under today in the list below.
+      </p>
+      <textarea
+        value={message}
+        onChange={(event) => setMessage(event.target.value)}
+        rows="3"
+        maxLength={1000}
+        placeholder="Write your message..."
+        className="mt-3 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:bg-white"
+      />
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs text-slate-400">{message.length}/1000</span>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={isSending || !message.trim()}
+          className="rounded-xl bg-emerald-600 px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+        >
+          {isSending ? "Sending..." : "Send message"}
+        </button>
+      </div>
+      {feedback ? (
+        <p className={`mt-2 text-sm ${feedback.ok ? "text-emerald-700" : "text-red-600"}`}>
+          {feedback.text}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 function CommentBox({ placeholder, onSend }) {
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState("");
@@ -397,6 +459,13 @@ export default function EmployeeActivityPage() {
               ))}
             </div>
           </section>
+        ) : null}
+
+        {employee ? (
+          <MessagePanel
+            employee={employee}
+            onSend={(message) => sendComment({ direct: true, message })}
+          />
         ) : null}
 
         {notice ? (
