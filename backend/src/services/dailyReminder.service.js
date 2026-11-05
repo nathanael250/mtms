@@ -36,14 +36,56 @@ function parseTime(value) {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
-function buildReminderText(fullName) {
+function buildReminderText(fullName, greeting = "Good morning") {
   const firstName = String(fullName || "").trim().split(/\s+/)[0] || "there";
   return [
-    `Good morning ${firstName},`,
+    `${greeting} ${firstName},`,
     "",
     "You have not added your daily plan for today yet.",
     "Please sign in to MOPAS, open My Tasks and add what you will work on today.",
   ].join("\n");
+}
+
+// Manual reminder from an admin to one staff member. Returns { status, full_name }.
+export async function sendPlanReminderToUser(userId) {
+  const pool = getPool();
+  const { date } = getLocalParts(env.reminderTimezone);
+
+  const [rows] = await pool.query(
+    `SELECT users.id, users.full_name, users.phone
+     FROM users JOIN roles ON roles.id = users.role_id
+     WHERE users.id = ? AND roles.name = 'staff' AND users.status = 'active'
+     LIMIT 1`,
+    [userId]
+  );
+  const person = rows[0];
+  if (!person) {
+    return { status: "not_found" };
+  }
+  const entry = { full_name: person.full_name };
+
+  const [plans] = await pool.query(
+    `SELECT 1 FROM daily_tasks
+     WHERE user_id = ? AND created_date = ? AND parent_task_id IS NULL LIMIT 1`,
+    [person.id, date]
+  );
+  if (plans.length) {
+    return { ...entry, status: "has_plan" };
+  }
+  if (!person.phone) {
+    return { ...entry, status: "no_phone" };
+  }
+
+  try {
+    const sent = await sendWhatsappMessage({
+      to: person.phone,
+      text: buildReminderText(person.full_name, "Hello"),
+    });
+    return { ...entry, status: sent.skipped ? "whatsapp_disabled" : "sent" };
+  } catch (error) {
+    console.error(`Manual plan reminder failed for user ${person.id}:`, error.message);
+    return { ...entry, status: "failed" };
+  }
 }
 
 export async function sendDailyPlanReminders({ dryRun = false, skipDedupe = false } = {}) {

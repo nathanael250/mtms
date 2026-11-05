@@ -87,6 +87,7 @@ export default function DailyActivitiesLogPage() {
   const [error, setError] = useState("");
   const [isReminding, setIsReminding] = useState(false);
   const [reminderMessage, setReminderMessage] = useState("");
+  const [remindingId, setRemindingId] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -129,6 +130,26 @@ export default function DailyActivitiesLogPage() {
     if (sortBy === "lowest") list.sort((a, b) => a.days_planned - b.days_planned);
     return list;
   }, [overview, sortBy]);
+
+  async function remindOne(employee) {
+    if (!window.confirm(`Send a WhatsApp reminder to ${employee.full_name} to add their plan for today?`)) {
+      return;
+    }
+    setReminderMessage("");
+    setError("");
+    setRemindingId(employee.id);
+    try {
+      const data = await apiFetch(`/daily-tasks/admin/employee/${employee.id}/remind`, {
+        method: "POST",
+        token,
+      });
+      setReminderMessage(data.message);
+    } catch (remindError) {
+      setError(remindError.message);
+    } finally {
+      setRemindingId(null);
+    }
+  }
 
   async function remindStaff() {
     setReminderMessage("");
@@ -293,7 +314,7 @@ export default function DailyActivitiesLogPage() {
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] text-left text-sm">
+            <table className="w-full min-w-[1020px] text-left text-sm">
               <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-5 py-3">Employee</th>
@@ -305,12 +326,13 @@ export default function DailyActivitiesLogPage() {
                   <th className="px-3 py-3">Job tasks</th>
                   <th className="px-3 py-3">Last plan</th>
                   <th className="px-3 py-3">Status</th>
+                  <th className="px-3 py-3 text-right">Reminder</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {isLoading ? (
                   <tr>
-                    <td colSpan="9" className="px-5 py-8 text-center text-slate-500">Loading...</td>
+                    <td colSpan="10" className="px-5 py-8 text-center text-slate-500">Loading...</td>
                   </tr>
                 ) : employees.length ? (
                   employees.map((employee) => {
@@ -351,12 +373,27 @@ export default function DailyActivitiesLogPage() {
                             {status.label}
                           </span>
                         </td>
+                        <td className="px-3 py-3 text-right">
+                          {employee.planned === 0 ? (
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                remindOne(employee);
+                              }}
+                              disabled={remindingId === employee.id}
+                              className="rounded-xl border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+                            >
+                              {remindingId === employee.id ? "Sending..." : "Send reminder"}
+                            </button>
+                          ) : null}
+                        </td>
                       </tr>
                     );
                   })
                 ) : (
                   <tr>
-                    <td colSpan="9" className="px-5 py-8 text-center text-slate-500">
+                    <td colSpan="10" className="px-5 py-8 text-center text-slate-500">
                       No staff members found.
                     </td>
                   </tr>

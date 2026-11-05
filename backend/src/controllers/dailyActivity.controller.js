@@ -1,7 +1,10 @@
 import { getPool } from "../config/database.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
-import { sendDailyPlanReminders } from "../services/dailyReminder.service.js";
+import {
+  sendDailyPlanReminders,
+  sendPlanReminderToUser,
+} from "../services/dailyReminder.service.js";
 import { getTodayYmd } from "../utils/today.js";
 import { sendPlanCommentNotification } from "../services/notification.service.js";
 
@@ -397,6 +400,26 @@ export const sendPlanReminders = asyncHandler(async (req, res) => {
     skipDedupe: true,
   });
   res.json(result);
+});
+
+export const remindEmployee = asyncHandler(async (req, res) => {
+  const result = await sendPlanReminderToUser(req.params.userId);
+  const name = result.full_name || "this employee";
+  const messages = {
+    sent: `Reminder sent to ${name} on WhatsApp.`,
+    has_plan: `${name} has already planned today.`,
+    no_phone: `${name} has no phone number saved.`,
+    whatsapp_disabled: "WhatsApp notifications are disabled on the server.",
+    failed: `The WhatsApp message to ${name} could not be sent.`,
+  };
+
+  if (result.status === "not_found") {
+    throw new ApiError(404, "Active staff member not found.");
+  }
+  if (result.status !== "sent") {
+    throw new ApiError(result.status === "failed" ? 502 : 400, messages[result.status]);
+  }
+  res.json({ message: messages.sent });
 });
 
 export const unlockEmployeeDay = asyncHandler(async (req, res) => {

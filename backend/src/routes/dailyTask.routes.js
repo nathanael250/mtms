@@ -14,6 +14,7 @@ import {
 import {
   getActivityOverview,
   getEmployeeActivity,
+  remindEmployee,
   sendPlanReminders,
   addEmployeeComment,
   deleteEmployeeComment,
@@ -28,6 +29,7 @@ router.use(authenticate);
 router.get("/admin/overview", authorizeRoles("admin"), getActivityOverview);
 router.get("/admin/employee/:userId", authorizeRoles("admin"), getEmployeeActivity);
 router.post("/admin/send-reminders", authorizeRoles("admin"), sendPlanReminders);
+router.post("/admin/employee/:userId/remind", authorizeRoles("admin"), remindEmployee);
 router.post(
   "/admin/employee/:userId/comments",
   authorizeRoles("admin"),
