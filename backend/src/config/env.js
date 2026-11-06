@@ -21,6 +21,9 @@ export const env = {
   defaultAdminEmail:
     process.env.DEFAULT_ADMIN_EMAIL || "admin@jobmanagement.local",
   defaultAdminPassword: process.env.DEFAULT_ADMIN_PASSWORD || "Admin12345!",
+  // Timezone that defines "today" for daily plans (the day changes at midnight here).
+  appTimezone:
+    process.env.APP_TIMEZONE || process.env.REMINDER_TIMEZONE || "Africa/Kigali",
   uploadsDir: process.env.UPLOADS_DIR || "uploads",
   googleConnectedEmail:
     process.env.GOOGLE_CONNECTED_EMAIL || "movepromotion1@gmail.com",
@@ -48,8 +51,5 @@ export const env = {
   wawpAccessToken: process.env.WAWP_ACCESS_TOKEN || "",
   whatsappAccessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
   whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
-  dailyReminderEnabled: process.env.DAILY_REMINDER_ENABLED === "true",
-  dailyReminderTime: process.env.DAILY_REMINDER_TIME || "09:30",
-  reminderTimezone: process.env.REMINDER_TIMEZONE || "Africa/Kigali",
   whatsappApiVersion: process.env.WHATSAPP_API_VERSION || "v20.0",
 };

@@ -3,15 +3,12 @@ import path from "path";
 import { createApp } from "./app.js";
 import { initializeDatabase } from "./config/database.js";
 import { env } from "./config/env.js";
-import { startDailyReminderScheduler } from "./services/dailyReminder.service.js";
 
 async function bootstrap() {
   const uploadsRoot = path.resolve(process.cwd(), env.uploadsDir);
   fs.mkdirSync(uploadsRoot, { recursive: true });
 
   await initializeDatabase();
-
-  startDailyReminderScheduler();
 
   const app = createApp();
   app.listen(env.port, () => {

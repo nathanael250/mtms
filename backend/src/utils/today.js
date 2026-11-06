@@ -4,7 +4,7 @@ import { env } from "../config/env.js";
 export function getTodayYmd() {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-CA", {
-      timeZone: env.reminderTimezone,
+      timeZone: env.appTimezone,
       year: "numeric",
       month: "2-digit",
       day: "2-digit",

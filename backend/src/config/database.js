@@ -246,22 +246,6 @@ async function ensureReportTemplateSchema() {
   }
 }
 
-async function ensureReminderSchema() {
-  await pool.query(
-    `CREATE TABLE IF NOT EXISTS reminder_logs (
-      id BIGINT AUTO_INCREMENT PRIMARY KEY,
-      user_id BIGINT NOT NULL,
-      reminder_type VARCHAR(50) NOT NULL,
-      reminder_date DATE NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE KEY uq_reminder_user_type_date (user_id, reminder_type, reminder_date),
-      CONSTRAINT fk_reminder_logs_user
-        FOREIGN KEY (user_id) REFERENCES users(id)
-        ON DELETE CASCADE
-    )`
-  );
-}
-
 async function ensureMentionFilesSchema() {
   await pool.query(
     `CREATE TABLE IF NOT EXISTS mention_files (
@@ -380,7 +364,6 @@ export async function initializeDatabase() {
   await ensureDocumentLibrarySchema();
   await ensureDailyTaskSchema();
   await ensureReportTemplateSchema();
-  await ensureReminderSchema();
   await ensureDailyPlanFeedbackSchema();
   await ensureMentionFilesSchema();
 

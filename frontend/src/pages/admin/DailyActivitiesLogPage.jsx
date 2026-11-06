@@ -85,8 +85,6 @@ export default function DailyActivitiesLogPage() {
   const [sortBy, setSortBy] = useState("progress");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [isReminding, setIsReminding] = useState(false);
-  const [reminderMessage, setReminderMessage] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -129,51 +127,6 @@ export default function DailyActivitiesLogPage() {
     if (sortBy === "lowest") list.sort((a, b) => a.days_planned - b.days_planned);
     return list;
   }, [overview, sortBy]);
-
-  async function remindStaff() {
-    setReminderMessage("");
-    setError("");
-    setIsReminding(true);
-    try {
-      const preview = await apiFetch("/daily-tasks/admin/send-reminders", {
-        method: "POST",
-        body: { dry_run: true },
-        token,
-      });
-      const targets = preview.results.filter((item) => item.status === "would_send");
-      const noPhone = preview.counts.no_phone;
-
-      if (!targets.length) {
-        setReminderMessage(
-          preview.counts.without_plan
-            ? `${noPhone} staff member(s) have no plan today but no phone number saved, so nobody can be reminded.`
-            : "Everyone has already planned their day today."
-        );
-        return;
-      }
-
-      const names = targets.map((item) => item.full_name).join(", ");
-      if (!window.confirm(`Send a WhatsApp reminder to ${targets.length} staff member(s) who have not planned today?\n\n${names}`)) {
-        return;
-      }
-
-      const result = await apiFetch("/daily-tasks/admin/send-reminders", {
-        method: "POST",
-        body: {},
-        token,
-      });
-      const { sent, failed, whatsapp_disabled: disabled } = result.counts;
-      setReminderMessage(
-        disabled
-          ? "WhatsApp notifications are disabled or not configured on the server, so nothing was sent."
-          : `Reminder sent to ${sent} staff member(s)${failed ? `, ${failed} failed` : ""}${noPhone ? `, ${noPhone} skipped (no phone number)` : ""}.`
-      );
-    } catch (remindError) {
-      setError(remindError.message);
-    } finally {
-      setIsReminding(false);
-    }
-  }
 
   function applyPreset(name) {
     setActivePreset(name);
@@ -229,14 +182,6 @@ export default function DailyActivitiesLogPage() {
               </label>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={remindStaff}
-            disabled={isReminding}
-            className="ml-auto rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-[13px] font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-60"
-          >
-            {isReminding ? "Checking..." : "Remind staff without a plan today"}
-          </button>
           <label className="flex items-center gap-2 text-[13px] text-slate-500">
             Sort by
             <select
@@ -256,11 +201,6 @@ export default function DailyActivitiesLogPage() {
         {error ? (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
             {error}
-          </div>
-        ) : null}
-        {reminderMessage ? (
-          <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
-            {reminderMessage}
           </div>
         ) : null}
 

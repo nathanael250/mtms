@@ -1,7 +1,6 @@
 import { getPool } from "../config/database.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
-import { sendDailyPlanReminders } from "../services/dailyReminder.service.js";
 import { getTodayYmd } from "../utils/today.js";
 import { sendPlanCommentNotification } from "../services/notification.service.js";
 
@@ -392,14 +391,6 @@ export const deleteEmployeeComment = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Comment not found.");
   }
   res.json({ message: "Comment deleted." });
-});
-
-export const sendPlanReminders = asyncHandler(async (req, res) => {
-  const result = await sendDailyPlanReminders({
-    dryRun: req.body?.dry_run === true,
-    skipDedupe: true,
-  });
-  res.json(result);
 });
 
 export const unlockEmployeeDay = asyncHandler(async (req, res) => {
