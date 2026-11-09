@@ -269,6 +269,10 @@ async function ensureMentionFilesSchema() {
   for (const statement of [
     "ALTER TABLE report_mentions ADD COLUMN resolution_message TEXT NULL",
     "ALTER TABLE report_mentions ADD COLUMN resolved_at DATETIME NULL",
+    // Tags can also come from a planned (daily) task, which has no job report.
+    "ALTER TABLE report_mentions MODIFY report_id BIGINT NULL",
+    "ALTER TABLE report_mentions ADD COLUMN daily_task_id BIGINT NULL",
+    "ALTER TABLE report_mentions ADD COLUMN source_title VARCHAR(255) NULL",
   ]) {
     try {
       await pool.query(statement);

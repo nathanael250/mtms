@@ -41,7 +41,7 @@ async function isDayEditable(userId, planDay) {
   return rows.length > 0;
 }
 
-async function assertDayEditable(userId, planDay) {
+export async function assertDayEditable(userId, planDay) {
   if (!(await isDayEditable(userId, planDay))) {
     throw new ApiError(
       403,
@@ -152,9 +152,27 @@ export const listDailyTasks = asyncHandler(async (req, res) => {
     todoItems = rows;
   }
 
+  // Help requests (tags of other staff) made from these planned tasks.
+  let taskMentions = [];
+  if (taskIds.length) {
+    const [rows] = await getPool().query(
+      `SELECT mentions.id, mentions.daily_task_id, mentions.mentioned_user_id,
+              mentions.status, mentions.message, mentions.resolution_message,
+              mentions.resolved_at, mentions.created_at,
+              tagged.full_name AS mentioned_user_name
+       FROM report_mentions AS mentions
+       JOIN users AS tagged ON tagged.id = mentions.mentioned_user_id
+       WHERE mentions.daily_task_id IN (?) AND mentions.mentioned_by = ?
+       ORDER BY mentions.id ASC`,
+      [taskIds, req.user.id]
+    );
+    taskMentions = rows;
+  }
+
   const tasksWithTodos = tasks.map((task) => ({
     ...task,
     todo_items: todoItems.filter((item) => item.parent_task_id === task.id),
+    mentions: taskMentions.filter((mention) => mention.daily_task_id === task.id),
   }));
 
   const editable = await isDayEditable(req.user.id, date);

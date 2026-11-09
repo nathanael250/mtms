@@ -5,6 +5,7 @@ import {
   sendMentionNotifications,
   sendMentionResolvedNotification,
 } from "../services/notification.service.js";
+import { assertDayEditable } from "./dailyTask.controller.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 
@@ -35,8 +36,8 @@ async function getMentionOrThrow(mentionId) {
             author.full_name AS mentioned_by_name,
             tagged.full_name AS mentioned_user_name
      FROM report_mentions AS mentions
-     JOIN task_daily_reports reports ON reports.id = mentions.report_id
-     JOIN tasks ON tasks.id = reports.task_id
+     LEFT JOIN task_daily_reports reports ON reports.id = mentions.report_id
+     LEFT JOIN tasks ON tasks.id = reports.task_id
      JOIN users AS author ON author.id = mentions.mentioned_by
      JOIN users AS tagged ON tagged.id = mentions.mentioned_user_id
      WHERE mentions.id = ?`,
@@ -101,6 +102,68 @@ export const createMention = asyncHandler(async (req, res) => {
 
   const [mention] = await withFiles([await getMentionOrThrow(result.insertId)]);
   res.status(201).json({ message: "Mention created successfully.", mention });
+});
+
+// A staff member asks a colleague for help on one of their own planned (daily) tasks.
+export const createPlannedMention = asyncHandler(async (req, res) => {
+  const message = String(req.body.message || "").trim();
+  if (!message) {
+    throw new ApiError(400, "Please explain what help you need.");
+  }
+  if (message.length > 2000) {
+    throw new ApiError(400, "The message is too long (maximum 2000 characters).");
+  }
+
+  const [tasks] = await getPool().query(
+    `SELECT id, description, DATE_FORMAT(created_date, '%Y-%m-%d') AS plan_day
+     FROM daily_tasks
+     WHERE id = ? AND user_id = ? AND parent_task_id IS NULL`,
+    [req.body.daily_task_id, req.user.id]
+  );
+  if (!tasks.length) {
+    throw new ApiError(404, "Planned task not found.");
+  }
+  await assertDayEditable(req.user.id, tasks[0].plan_day);
+
+  if (Number(req.body.mentioned_user_id) === req.user.id) {
+    throw new ApiError(400, "You cannot tag yourself.");
+  }
+  const [taggedUsers] = await getPool().query(
+    `SELECT users.id, users.full_name, users.email, users.phone
+     FROM users WHERE users.id = ? AND users.status = 'active' LIMIT 1`,
+    [req.body.mentioned_user_id]
+  );
+  if (!taggedUsers.length) {
+    throw new ApiError(404, "That staff member was not found.");
+  }
+
+  const [result] = await getPool().query(
+    `INSERT INTO report_mentions
+       (report_id, daily_task_id, source_title, mentioned_by, mentioned_user_id, message)
+     VALUES (NULL, ?, ?, ?, ?, ?)`,
+    [
+      tasks[0].id,
+      tasks[0].description.slice(0, 255),
+      req.user.id,
+      taggedUsers[0].id,
+      message,
+    ]
+  );
+
+  // A failed WhatsApp message must not undo the tag; it is still on their Mentions page.
+  try {
+    await sendMentionNotifications({
+      taggedUser: taggedUsers[0],
+      authorName: req.user.full_name,
+      taskTitle: tasks[0].description,
+      message,
+    });
+  } catch (error) {
+    console.error(`Planned mention notification failed for mention ${result.insertId}:`, error.message);
+  }
+
+  const [mention] = await withFiles([await getMentionOrThrow(result.insertId)]);
+  res.status(201).json({ message: "Help request sent.", mention });
 });
 
 export const listMentions = asyncHandler(async (_req, res) => {
@@ -168,13 +231,15 @@ async function transitionMention(req, res, nextStatus, actionName, verb) {
     [nextStatus, req.params.id]
   );
 
-  await createActivityLog({
-    jobId: mention.job_id,
-    taskId: mention.task_id,
-    userId: req.user.id,
-    action: actionName,
-    description: `${req.user.full_name} ${verb} a report mention.`,
-  });
+  if (mention.job_id) {
+    await createActivityLog({
+      jobId: mention.job_id,
+      taskId: mention.task_id,
+      userId: req.user.id,
+      action: actionName,
+      description: `${req.user.full_name} ${verb} a report mention.`,
+    });
+  }
 
   res.json({ message: `Mention ${nextStatus} successfully.` });
 }
@@ -205,13 +270,15 @@ export const resolveMention = asyncHandler(async (req, res) => {
     [resolutionMessage || null, mention.id]
   );
 
-  await createActivityLog({
-    jobId: mention.job_id,
-    taskId: mention.task_id,
-    userId: req.user.id,
-    action: "mention_resolved",
-    description: `${req.user.full_name} resolved a report mention.`,
-  });
+  if (mention.job_id) {
+    await createActivityLog({
+      jobId: mention.job_id,
+      taskId: mention.task_id,
+      userId: req.user.id,
+      action: "mention_resolved",
+      description: `${req.user.full_name} resolved a report mention.`,
+    });
+  }
 
   // Tell the person who tagged them, unless they resolved their own tag.
   let whatsapp = "not_needed";
@@ -225,11 +292,13 @@ export const resolveMention = asyncHandler(async (req, res) => {
         "SELECT COUNT(*) AS total FROM mention_files WHERE mention_id = ? AND stage = 'resolution'",
         [mention.id]
       );
-      const [[task]] = await getPool().query(
-        `SELECT tasks.title FROM task_daily_reports reports
-         JOIN tasks ON tasks.id = reports.task_id WHERE reports.id = ?`,
-        [mention.report_id]
-      );
+      const [[task]] = mention.report_id
+        ? await getPool().query(
+            `SELECT tasks.title FROM task_daily_reports reports
+             JOIN tasks ON tasks.id = reports.task_id WHERE reports.id = ?`,
+            [mention.report_id]
+          )
+        : [[{ title: mention.source_title }]];
       whatsapp = await sendMentionResolvedNotification({
         tagger: taggers[0],
         resolverName: req.user.full_name,

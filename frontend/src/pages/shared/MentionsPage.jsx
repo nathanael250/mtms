@@ -199,6 +199,11 @@ export default function MentionsPage() {
                       {mention.mentioned_by_name || "Staff"} mentioned{" "}
                       {mention.mentioned_user_name || "staff"}
                     </p>
+                    {mention.source_title && !mention.report_id ? (
+                      <p className="mt-1 text-xs font-medium text-slate-500">
+                        On planned task: {mention.source_title}
+                      </p>
+                    ) : null}
                     <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">
                       {mention.message}
                     </p>

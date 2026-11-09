@@ -90,6 +90,9 @@ export default function TasksPage() {
   const [plannedTaskTitle, setPlannedTaskTitle] = useState("");
   const [plannedTaskTime, setPlannedTaskTime] = useState("");
   const [plannedTodoText, setPlannedTodoText] = useState("");
+  const [plannedTag, setPlannedTag] = useState({ on: false, userId: "", message: "" });
+  const [cardTag, setCardTag] = useState(null); // { taskId, userId, message }
+  const [isTagging, setIsTagging] = useState(false);
   const [plannedDate, setPlannedDate] = useState(getDateInputValue());
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [taskForm, setTaskForm] = useState(initialTaskForm);
@@ -360,8 +363,14 @@ export default function TasksPage() {
     setSuccess("");
     setIsPlannedSubmitting(true);
 
+    if (plannedTag.on && (!plannedTag.userId || !plannedTag.message.trim())) {
+      setError("To ask for help, choose a staff member and write what you need.");
+      setIsPlannedSubmitting(false);
+      return;
+    }
+
     try {
-      await apiFetch("/daily-tasks", {
+      const created = await apiFetch("/daily-tasks", {
         method: "POST",
         token,
         body: {
@@ -374,11 +383,57 @@ export default function TasksPage() {
       setPlannedTaskTitle("");
       setPlannedTaskTime("");
       setPlannedTodoText("");
+
+      if (plannedTag.on) {
+        try {
+          await apiFetch("/report-mentions/planned", {
+            method: "POST",
+            token,
+            body: {
+              daily_task_id: created.task.id,
+              mentioned_user_id: Number(plannedTag.userId),
+              message: plannedTag.message.trim(),
+            },
+          });
+          setSuccess("Planned task created and your help request was sent.");
+        } catch (tagError) {
+          setError(`Planned task created, but the help request failed: ${tagError.message}`);
+        }
+        setPlannedTag({ on: false, userId: "", message: "" });
+      }
       await loadPlannedTasks(plannedDate);
     } catch (submitError) {
       setError(submitError.message);
     } finally {
       setIsPlannedSubmitting(false);
+    }
+  }
+
+  async function sendCardTag() {
+    if (!cardTag || !cardTag.userId || !cardTag.message.trim()) {
+      setError("Choose a staff member and write what you need.");
+      return;
+    }
+    setError("");
+    setSuccess("");
+    setIsTagging(true);
+    try {
+      await apiFetch("/report-mentions/planned", {
+        method: "POST",
+        token,
+        body: {
+          daily_task_id: cardTag.taskId,
+          mentioned_user_id: Number(cardTag.userId),
+          message: cardTag.message.trim(),
+        },
+      });
+      setCardTag(null);
+      setSuccess("Help request sent.");
+      await loadPlannedTasks(plannedDate);
+    } catch (tagError) {
+      setError(tagError.message);
+    } finally {
+      setIsTagging(false);
     }
   }
 
@@ -908,6 +963,50 @@ export default function TasksPage() {
                   </span>
                 </label>
 
+                <label className="mt-5 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={plannedTag.on}
+                    onChange={(event) =>
+                      setPlannedTag((current) => ({ ...current, on: event.target.checked }))
+                    }
+                  />
+                  Ask another staff member for help on this task
+                </label>
+                {plannedTag.on ? (
+                  <div className="app-panel mt-3 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <select
+                      value={plannedTag.userId}
+                      onChange={(event) =>
+                        setPlannedTag((current) => ({ ...current, userId: event.target.value }))
+                      }
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
+                    >
+                      <option value="">Select staff</option>
+                      {staff
+                        .filter((member) => member.id !== user.id)
+                        .map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.full_name}
+                          </option>
+                        ))}
+                    </select>
+                    <textarea
+                      value={plannedTag.message}
+                      onChange={(event) =>
+                        setPlannedTag((current) => ({ ...current, message: event.target.value }))
+                      }
+                      rows="3"
+                      maxLength={2000}
+                      placeholder="What do you need help with?"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
+                    />
+                    <p className="text-xs text-slate-500">
+                      They get a WhatsApp message and see it under Mentions, where they can resolve it.
+                    </p>
+                  </div>
+                ) : null}
+
                 <button
                   type="button"
                   onClick={createPlannedTask}
@@ -1067,6 +1166,89 @@ export default function TasksPage() {
                                 No todo items added inside this task.
                               </p>
                             )}
+
+                            {(task.mentions || []).map((mention) => (
+                              <div
+                                key={mention.id}
+                                className={`mt-3 rounded-xl border px-3 py-2 ${
+                                  mention.status === "resolved"
+                                    ? "border-emerald-100 bg-emerald-50"
+                                    : "border-amber-100 bg-amber-50"
+                                }`}
+                              >
+                                <p className="text-xs font-semibold text-slate-700">
+                                  Help asked from {mention.mentioned_user_name} ·{" "}
+                                  {mention.status === "resolved" ? "Resolved" : "Waiting"}
+                                </p>
+                                <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
+                                  {mention.message}
+                                </p>
+                                {mention.status === "resolved" ? (
+                                  <p className="mt-1 whitespace-pre-wrap text-sm text-emerald-800">
+                                    Reply: {mention.resolution_message || "Marked as resolved."}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ))}
+
+                            {canEditPlanned ? (
+                              cardTag?.taskId === task.id ? (
+                                <div className="app-panel mt-3 space-y-2 rounded-xl border border-slate-200 bg-white p-3">
+                                  <select
+                                    value={cardTag.userId}
+                                    onChange={(event) =>
+                                      setCardTag((current) => ({ ...current, userId: event.target.value }))
+                                    }
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                                  >
+                                    <option value="">Select staff</option>
+                                    {staff
+                                      .filter((member) => member.id !== user.id)
+                                      .map((member) => (
+                                        <option key={member.id} value={member.id}>
+                                          {member.full_name}
+                                        </option>
+                                      ))}
+                                  </select>
+                                  <textarea
+                                    value={cardTag.message}
+                                    onChange={(event) =>
+                                      setCardTag((current) => ({ ...current, message: event.target.value }))
+                                    }
+                                    rows="2"
+                                    maxLength={2000}
+                                    placeholder="What do you need help with?"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                                  />
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={sendCardTag}
+                                      disabled={isTagging}
+                                      className="rounded-xl bg-[var(--brand-700)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                                    >
+                                      {isTagging ? "Sending..." : "Send request"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setCardTag(null)}
+                                      className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setCardTag({ taskId: task.id, userId: "", message: "" })}
+                                  className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+                                >
+                                  <MessageSquare className="h-3.5 w-3.5" />
+                                  Ask for help
+                                </button>
+                              )
+                            ) : null}
 
                             {dayComments
                               .filter((comment) => comment.daily_task_id === task.id)

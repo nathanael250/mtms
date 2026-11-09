@@ -1,6 +1,8 @@
 import { Router } from "express";
+import { body } from "express-validator";
 import {
   createMention,
+  createPlannedMention,
   getMentionById,
   getMyCreatedMentions,
   getMyMentions,
@@ -17,6 +19,16 @@ import { createMentionValidator } from "../validators/mention.validators.js";
 const router = Router();
 
 router.use(authenticate);
+router.post(
+  "/planned",
+  [
+    body("daily_task_id").isInt({ min: 1 }).withMessage("Planned task is required."),
+    body("mentioned_user_id").isInt({ min: 1 }).withMessage("Choose who to tag."),
+    body("message").trim().notEmpty().withMessage("Please explain what help you need."),
+  ],
+  validateRequest,
+  createPlannedMention
+);
 router.post("/", createMentionValidator, validateRequest, createMention);
 router.get("/", authorizeRoles("admin"), listMentions);
 router.get("/my-created", getMyCreatedMentions);
