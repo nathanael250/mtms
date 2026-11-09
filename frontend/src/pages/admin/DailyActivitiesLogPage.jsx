@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Megaphone, X } from "lucide-react";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../lib/api";
@@ -75,6 +76,197 @@ const presets = [
   ["30", "Last 30 days"],
   ["month", "This month"],
 ];
+
+const audiences = [
+  ["all", "All staff", "Everyone with an active account"],
+  ["not_planned", "Did not plan", "Staff with no daily plan in the dates selected above"],
+  ["planned", "Planned", "Staff who have a daily plan in the dates selected above"],
+];
+
+function BroadcastModal({ range, token, onClose }) {
+  const [audience, setAudience] = useState("not_planned");
+  const [message, setMessage] = useState("");
+  const [recipients, setRecipients] = useState(null);
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState("");
+  const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRecipients(null);
+    apiFetch("/daily-tasks/admin/broadcast", {
+      method: "POST",
+      token,
+      body: { audience, from: range.from, to: range.to, dry_run: true },
+    })
+      .then((data) => !cancelled && setRecipients(data.recipients))
+      .catch((loadError) => !cancelled && setError(loadError.message));
+    return () => {
+      cancelled = true;
+    };
+  }, [audience, range.from, range.to, token]);
+
+  const reachable = recipients ? recipients.filter((person) => person.has_phone) : [];
+  const noPhone = recipients ? recipients.filter((person) => !person.has_phone) : [];
+
+  async function send() {
+    if (!message.trim() || !reachable.length) return;
+    const label = audiences.find(([key]) => key === audience)[1].toLowerCase();
+    if (!window.confirm(`Send this WhatsApp message to ${reachable.length} staff member(s) (${label})?`)) {
+      return;
+    }
+    setIsSending(true);
+    setError("");
+    try {
+      const data = await apiFetch("/daily-tasks/admin/broadcast", {
+        method: "POST",
+        token,
+        body: { audience, message: message.trim(), from: range.from, to: range.to },
+      });
+      setResult(data.counts);
+    } catch (sendError) {
+      setError(sendError.message);
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4">
+      <div className="app-panel max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Broadcast WhatsApp message</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Choose who receives it, write the message and send.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {result ? (
+          <div className="mt-5 space-y-3">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+              {result.disabled
+                ? "WhatsApp notifications are disabled on the server, so nothing was sent."
+                : `Message sent to ${result.sent} of ${result.total} staff member(s).`}
+              {result.failed ? ` ${result.failed} failed.` : ""}
+              {result.no_phone ? ` ${result.no_phone} skipped (no phone number).` : ""}
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <fieldset className="mt-5 space-y-2">
+              <legend className="mb-1 text-sm font-medium text-slate-600">Send to</legend>
+              {audiences.map(([key, label, note]) => (
+                <label
+                  key={key}
+                  className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition ${
+                    audience === key
+                      ? "border-blue-500 bg-blue-50"
+                      : "border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="broadcast-audience"
+                    value={key}
+                    checked={audience === key}
+                    onChange={() => setAudience(key)}
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-slate-900">{label}</span>
+                    <span className="block text-xs text-slate-500">{note}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+
+            <div className="mt-3 rounded-xl bg-slate-50 px-4 py-3 text-xs text-slate-600">
+              {recipients === null ? (
+                "Checking recipients..."
+              ) : recipients.length ? (
+                <>
+                  <p className="font-semibold text-slate-700">
+                    {reachable.length} will receive it
+                    {noPhone.length ? ` · ${noPhone.length} have no phone number` : ""}
+                  </p>
+                  <p className="mt-1 max-h-20 overflow-y-auto">
+                    {reachable.map((person) => person.full_name).join(", ")}
+                  </p>
+                  {noPhone.length ? (
+                    <p className="mt-1 text-amber-700">
+                      No phone: {noPhone.map((person) => person.full_name).join(", ")}
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                "Nobody matches this group."
+              )}
+            </div>
+
+            <label className="mt-4 block">
+              <span className="mb-2 block text-sm font-medium text-slate-600">Message</span>
+              <textarea
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                rows="5"
+                maxLength={1000}
+                placeholder="Write your message..."
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:bg-white"
+              />
+              <span className="mt-1 block text-right text-xs text-slate-400">
+                {message.length}/1000
+              </span>
+            </label>
+
+            {error ? (
+              <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+                {error}
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={send}
+                disabled={isSending || !message.trim() || !reachable.length}
+                className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+              >
+                {isSending ? "Sending..." : `Send to ${reachable.length}`}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function DailyActivitiesLogPage() {
   const { token } = useAuth();
@@ -182,6 +374,14 @@ export default function DailyActivitiesLogPage() {
               </label>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={() => setIsBroadcastOpen(true)}
+            className="ml-auto inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-emerald-700"
+          >
+            <Megaphone className="h-4 w-4" />
+            Broadcast message
+          </button>
           <label className="flex items-center gap-2 text-[13px] text-slate-500">
             Sort by
             <select
@@ -307,6 +507,13 @@ export default function DailyActivitiesLogPage() {
         </section>
       </div>
 
+      {isBroadcastOpen ? (
+        <BroadcastModal
+          range={range}
+          token={token}
+          onClose={() => setIsBroadcastOpen(false)}
+        />
+      ) : null}
     </DashboardLayout>
   );
 }

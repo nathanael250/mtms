@@ -272,3 +272,17 @@ export async function sendCredentialsNotification({ user, password, loginUrl }) 
   const result = await sendWhatsapp({ to: user.phone, text });
   return result.skipped ? "disabled" : "sent";
 }
+
+// Free-text message from an admin to one staff member (used for broadcasts).
+// Throws if WhatsApp delivery fails. Returns "sent", "disabled" or "no_phone".
+export async function sendBroadcastNotification({ employee, authorName, message }) {
+  if (!employee.phone) {
+    return "no_phone";
+  }
+  const name = String(employee.full_name || "").trim().split(/\s+/)[0] || "there";
+  const result = await sendWhatsapp({
+    to: employee.phone,
+    text: [`Hello ${name},`, "", message, "", `- ${authorName} (MOPAS)`].join("\n"),
+  });
+  return result.skipped ? "disabled" : "sent";
+}

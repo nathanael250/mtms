@@ -134,7 +134,7 @@ export const listDailyTasks = asyncHandler(async (req, res) => {
      WHERE user_id = ?
        AND created_date = ?
        AND parent_task_id IS NULL
-     ORDER BY id ASC`,
+     ORDER BY sort_order IS NULL, sort_order ASC, id ASC`,
     [req.user.id, date]
   );
 
@@ -146,7 +146,7 @@ export const listDailyTasks = asyncHandler(async (req, res) => {
     const [rows] = await getPool().query(
       `SELECT * FROM daily_tasks
        WHERE user_id = ? AND parent_task_id IN (${placeholders})
-       ORDER BY id ASC`,
+       ORDER BY sort_order IS NULL, sort_order ASC, id ASC`,
       [req.user.id, ...taskIds]
     );
     todoItems = rows;
@@ -279,7 +279,7 @@ export const updateDailyTask = asyncHandler(async (req, res) => {
 
   const [[updated]] = await getPool().query("SELECT * FROM daily_tasks WHERE id = ?", [task.id]);
   const [todos] = await getPool().query(
-    "SELECT * FROM daily_tasks WHERE parent_task_id = ? AND user_id = ? ORDER BY id ASC",
+    "SELECT * FROM daily_tasks WHERE parent_task_id = ? AND user_id = ? ORDER BY sort_order IS NULL, sort_order ASC, id ASC",
     [task.id, req.user.id]
   );
 
@@ -439,4 +439,55 @@ export const deleteDayReportFile = asyncHandler(async (req, res) => {
   await fs.unlink(path.resolve(process.cwd(), rows[0].file_path)).catch(() => {});
 
   res.json({ message: "File removed." });
+});
+
+// Saves a new order for planned tasks (or for the to-dos of one task).
+// Body: { ids: [id, id, ...] } in the wanted order.
+export const reorderDailyTasks = asyncHandler(async (req, res) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.map(Number) : [];
+  if (!ids.length || ids.some((id) => !Number.isInteger(id) || id < 1)) {
+    throw new ApiError(400, "A list of task ids is required.");
+  }
+  if (new Set(ids).size !== ids.length) {
+    throw new ApiError(400, "Task ids must be unique.");
+  }
+
+  const placeholders = ids.map(() => "?").join(", ");
+  const [rows] = await getPool().query(
+    `SELECT id, parent_task_id, ${PLAN_DAY_SQL} FROM daily_tasks
+     WHERE user_id = ? AND id IN (${placeholders})`,
+    [req.user.id, ...ids]
+  );
+  if (rows.length !== ids.length) {
+    throw new ApiError(404, "Some tasks were not found.");
+  }
+
+  const sameList = rows.every(
+    (row) =>
+      row.plan_day === rows[0].plan_day &&
+      (row.parent_task_id ?? null) === (rows[0].parent_task_id ?? null)
+  );
+  if (!sameList) {
+    throw new ApiError(400, "Only items from the same list can be reordered together.");
+  }
+  await assertDayEditable(req.user.id, rows[0].plan_day);
+
+  const connection = await getPool().getConnection();
+  try {
+    await connection.beginTransaction();
+    for (let index = 0; index < ids.length; index += 1) {
+      await connection.query(
+        "UPDATE daily_tasks SET sort_order = ? WHERE id = ? AND user_id = ?",
+        [index, ids[index], req.user.id]
+      );
+    }
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+
+  res.json({ message: "Order saved." });
 });

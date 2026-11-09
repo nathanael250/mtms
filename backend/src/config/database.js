@@ -205,6 +205,7 @@ async function ensureDailyTaskSchema() {
   for (const statement of [
     "ALTER TABLE daily_tasks ADD COLUMN parent_task_id BIGINT NULL AFTER user_id",
     "ALTER TABLE daily_tasks ADD COLUMN planned_time TIME NULL AFTER description",
+    "ALTER TABLE daily_tasks ADD COLUMN sort_order INT NULL",
   ]) {
     try {
       await pool.query(statement);

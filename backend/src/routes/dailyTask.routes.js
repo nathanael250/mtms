@@ -7,6 +7,7 @@ import {
   toggleDailyTask,
   deleteDailyTask,
   updateDailyTask,
+  reorderDailyTasks,
   saveDayReport,
   uploadDayReportFile,
   deleteDayReportFile,
@@ -17,6 +18,7 @@ import {
   addEmployeeComment,
   deleteEmployeeComment,
   unlockEmployeeDay,
+  broadcastMessage,
   lockEmployeeDay,
 } from "../controllers/dailyActivity.controller.js";
 
@@ -31,6 +33,7 @@ router.post(
   authorizeRoles("admin"),
   addEmployeeComment
 );
+router.post("/admin/broadcast", authorizeRoles("admin"), broadcastMessage);
 router.delete("/admin/comments/:id", authorizeRoles("admin"), deleteEmployeeComment);
 router.post(
   "/admin/employee/:userId/unlock",
@@ -43,6 +46,7 @@ router.delete(
   lockEmployeeDay
 );
 router.put("/day-report", saveDayReport);
+router.put("/reorder", reorderDailyTasks);
 router.post("/day-report/files", uploadSingleAttachment, uploadDayReportFile);
 router.delete("/day-report/files/:id", deleteDayReportFile);
 router.post("/", createDailyTask);

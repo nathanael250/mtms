@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import {
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  ChevronsUp,
   Clock3,
   Circle,
   FileUp,
@@ -422,6 +425,86 @@ export default function TasksPage() {
     } catch (toggleError) {
       setError(toggleError.message);
     }
+  }
+
+  // Moves one planned task (or one to-do inside a task) to a new position.
+  // `parentId` is null for planned tasks, or the task id for its to-dos.
+  // `target` is "top", "up" or "down".
+  async function handleMoveItem(parentId, itemId, target) {
+    const list =
+      parentId === null
+        ? plannedTasks
+        : plannedTasks.find((task) => task.id === parentId)?.todo_items || [];
+    const from = list.findIndex((item) => item.id === itemId);
+    if (from < 0) return;
+
+    const to = target === "top" ? 0 : target === "up" ? from - 1 : from + 1;
+    if (to < 0 || to >= list.length || to === from) return;
+
+    const reordered = [...list];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+
+    setError("");
+    setSuccess("");
+    setPlannedTasks((current) =>
+      parentId === null
+        ? reordered
+        : current.map((task) =>
+            task.id === parentId ? { ...task, todo_items: reordered } : task
+          )
+    );
+
+    try {
+      await apiFetch("/daily-tasks/reorder", {
+        method: "PUT",
+        token,
+        body: { ids: reordered.map((item) => item.id) },
+      });
+    } catch (moveError) {
+      setError(moveError.message);
+      loadPlannedTasks(plannedDate);
+    }
+  }
+
+  function MoveButtons({ parentId, itemId, index, count, size = "h-4 w-4" }) {
+    if (!canEditPlanned || count < 2) return null;
+    const base =
+      "rounded-lg p-1 text-slate-400 transition hover:bg-white hover:text-[var(--brand-700)] disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400";
+    return (
+      <span className="inline-flex shrink-0 items-center">
+        <button
+          type="button"
+          onClick={() => handleMoveItem(parentId, itemId, "top")}
+          disabled={index === 0}
+          className={base}
+          aria-label="Move to first place"
+          title="Move to first place"
+        >
+          <ChevronsUp className={size} />
+        </button>
+        <button
+          type="button"
+          onClick={() => handleMoveItem(parentId, itemId, "up")}
+          disabled={index === 0}
+          className={base}
+          aria-label="Move up"
+          title="Move up"
+        >
+          <ChevronUp className={size} />
+        </button>
+        <button
+          type="button"
+          onClick={() => handleMoveItem(parentId, itemId, "down")}
+          disabled={index === count - 1}
+          className={base}
+          aria-label="Move down"
+          title="Move down"
+        >
+          <ChevronDown className={size} />
+        </button>
+      </span>
+    );
   }
 
   async function handleDeletePlannedTask(taskId) {
@@ -884,7 +967,7 @@ export default function TasksPage() {
                 ) : null}
 
                 <div className="mt-5 space-y-3">
-                  {plannedTasks.map((task) => {
+                  {plannedTasks.map((task, taskIndex) => {
                     const todoItems = task.todo_items || [];
                     const isTaskDone =
                       task.is_completed ||
@@ -939,7 +1022,7 @@ export default function TasksPage() {
 
                             {todoItems.length ? (
                               <div className="mt-3 space-y-2">
-                                {todoItems.map((item) => (
+                                {todoItems.map((item, itemIndex) => (
                                   <div key={item.id} className="flex items-start gap-2">
                                     <button
                                       type="button"
@@ -967,6 +1050,15 @@ export default function TasksPage() {
                                     >
                                       {item.description}
                                     </p>
+                                    <span className="ml-auto">
+                                      <MoveButtons
+                                        parentId={task.id}
+                                        itemId={item.id}
+                                        index={itemIndex}
+                                        count={todoItems.length}
+                                        size="h-3.5 w-3.5"
+                                      />
+                                    </span>
                                   </div>
                                 ))}
                               </div>
@@ -995,6 +1087,12 @@ export default function TasksPage() {
                           </div>
                           {canEditPlanned ? (
                             <>
+                          <MoveButtons
+                            parentId={null}
+                            itemId={task.id}
+                            index={taskIndex}
+                            count={plannedTasks.length}
+                          />
                           <button
                             type="button"
                             onClick={() => openPlannedEdit(task)}

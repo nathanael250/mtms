@@ -2,7 +2,10 @@ import { getPool } from "../config/database.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 import { getTodayYmd } from "../utils/today.js";
-import { sendPlanCommentNotification } from "../services/notification.service.js";
+import {
+  sendBroadcastNotification,
+  sendPlanCommentNotification,
+} from "../services/notification.service.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -184,7 +187,7 @@ export const getEmployeeActivity = asyncHandler(async (req, res) => {
             completed_at, DATE_FORMAT(created_date, '%Y-%m-%d') AS created_date
      FROM daily_tasks
      WHERE user_id = ? AND created_date BETWEEN ? AND ?
-     ORDER BY created_date DESC, id ASC`,
+     ORDER BY created_date DESC, sort_order IS NULL, sort_order ASC, id ASC`,
     [req.params.userId, from, to]
   );
 
@@ -391,6 +394,103 @@ export const deleteEmployeeComment = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Comment not found.");
   }
   res.json({ message: "Comment deleted." });
+});
+
+const BROADCAST_AUDIENCES = ["all", "not_planned", "planned"];
+const BROADCAST_DELAY_MS = 600;
+
+// Sends one WhatsApp message to a group of staff: everyone, only those who have
+// not planned in the date range, or only those who have. Body: { audience,
+// message, from, to, dry_run }. With dry_run it only lists who would receive it.
+export const broadcastMessage = asyncHandler(async (req, res) => {
+  const audience = String(req.body.audience || "");
+  const message = String(req.body.message || "").trim();
+  const dryRun = req.body.dry_run === true;
+
+  if (!BROADCAST_AUDIENCES.includes(audience)) {
+    throw new ApiError(400, "Choose who should receive the message.");
+  }
+  if (!dryRun) {
+    if (!message) {
+      throw new ApiError(400, "Message cannot be empty.");
+    }
+    if (message.length > 1000) {
+      throw new ApiError(400, "Message is too long (maximum 1000 characters).");
+    }
+  }
+
+  const { from, to } = getRange({ from: req.body.from, to: req.body.to });
+
+  const [staff] = await getPool().query(
+    `SELECT users.id, users.full_name, users.phone,
+            EXISTS (
+              SELECT 1 FROM daily_tasks
+              WHERE daily_tasks.user_id = users.id
+                AND daily_tasks.parent_task_id IS NULL
+                AND daily_tasks.created_date BETWEEN ? AND ?
+            ) AS has_plan
+     FROM users JOIN roles ON roles.id = users.role_id
+     WHERE roles.name = 'staff' AND users.status = 'active'
+     ORDER BY users.full_name ASC`,
+    [from, to]
+  );
+
+  const targets = staff.filter((person) =>
+    audience === "all"
+      ? true
+      : audience === "planned"
+        ? Boolean(person.has_plan)
+        : !person.has_plan
+  );
+
+  if (dryRun) {
+    res.json({
+      audience,
+      recipients: targets.map((person) => ({
+        id: person.id,
+        full_name: person.full_name,
+        has_phone: Boolean(person.phone),
+      })),
+    });
+    return;
+  }
+
+  if (!targets.length) {
+    throw new ApiError(400, "No staff members match that group.");
+  }
+
+  const results = [];
+  for (const person of targets) {
+    if (!person.phone) {
+      results.push({ id: person.id, full_name: person.full_name, status: "no_phone" });
+      continue;
+    }
+    try {
+      const status = await sendBroadcastNotification({
+        employee: person,
+        authorName: req.user.full_name,
+        message,
+      });
+      results.push({ id: person.id, full_name: person.full_name, status });
+    } catch (error) {
+      console.error(`Broadcast WhatsApp failed for user ${person.id}:`, error.message);
+      results.push({ id: person.id, full_name: person.full_name, status: "failed" });
+    }
+    // Small pause so WhatsApp does not see a burst of messages.
+    await new Promise((resolve) => setTimeout(resolve, BROADCAST_DELAY_MS));
+  }
+
+  const count = (status) => results.filter((item) => item.status === status).length;
+  res.json({
+    counts: {
+      total: results.length,
+      sent: count("sent"),
+      no_phone: count("no_phone"),
+      failed: count("failed"),
+      disabled: count("disabled"),
+    },
+    results,
+  });
 });
 
 export const unlockEmployeeDay = asyncHandler(async (req, res) => {
