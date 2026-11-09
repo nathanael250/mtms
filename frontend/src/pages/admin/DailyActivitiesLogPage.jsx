@@ -89,7 +89,6 @@ function BroadcastModal({ range, token, onClose }) {
   const [recipients, setRecipients] = useState(null);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
-  const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
   const [result, setResult] = useState(null);
 
   useEffect(() => {
@@ -277,6 +276,7 @@ export default function DailyActivitiesLogPage() {
   const [sortBy, setSortBy] = useState("progress");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
 
   useEffect(() => {
     async function load() {
