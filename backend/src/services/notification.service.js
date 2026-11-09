@@ -99,12 +99,18 @@ async function sendWawpWhatsapp({ to, text }) {
         message: text,
         reply_to: null,
       }),
+      // A slow provider must not hold up a whole broadcast.
+      signal: AbortSignal.timeout(20000),
     }
   );
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`WAWP notification failed: ${body}`);
+    // Cloudflare error pages are long HTML; keep the log readable.
+    const summary = body.trimStart().startsWith("<")
+      ? `HTTP ${response.status} (the provider returned an error page)`
+      : body.slice(0, 300);
+    throw new Error(`WAWP notification failed: ${summary}`);
   }
 
   return { skipped: false };

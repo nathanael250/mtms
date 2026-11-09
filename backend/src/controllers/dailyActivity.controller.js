@@ -398,6 +398,37 @@ export const deleteEmployeeComment = asyncHandler(async (req, res) => {
 
 const BROADCAST_AUDIENCES = ["all", "not_planned", "planned"];
 const BROADCAST_DELAY_MS = 600;
+const BROADCAST_DUPLICATE_WINDOW_MS = 10 * 60 * 1000;
+
+// Remembers recent broadcasts so the same message is not sent twice by accident
+// (for example when the page showed an error and the admin pressed Send again).
+const recentBroadcasts = new Map();
+
+function broadcastKey(adminId, audience, from, to, message) {
+  return [adminId, audience, from, to, message].join("|");
+}
+
+async function deliverBroadcast({ targets, authorName, message, key }) {
+  let sent = 0;
+  for (const person of targets) {
+    if (!person.phone) continue;
+    try {
+      const status = await sendBroadcastNotification({
+        employee: person,
+        authorName,
+        message,
+      });
+      if (status === "sent") sent += 1;
+    } catch (error) {
+      console.error(`Broadcast WhatsApp failed for user ${person.id}:`, error.message);
+    }
+    // Small pause so WhatsApp does not see a burst of messages.
+    await new Promise((resolve) => setTimeout(resolve, BROADCAST_DELAY_MS));
+  }
+  console.log(`Broadcast finished: ${sent} of ${targets.length} delivered.`);
+  // Nothing was delivered (for example the WhatsApp limit): allow trying again.
+  if (!sent) recentBroadcasts.delete(key);
+}
 
 // Sends one WhatsApp message to a group of staff: everyone, only those who have
 // not planned in the date range, or only those who have. Body: { audience,
@@ -459,37 +490,36 @@ export const broadcastMessage = asyncHandler(async (req, res) => {
     throw new ApiError(400, "No staff members match that group.");
   }
 
-  const results = [];
-  for (const person of targets) {
-    if (!person.phone) {
-      results.push({ id: person.id, full_name: person.full_name, status: "no_phone" });
-      continue;
-    }
-    try {
-      const status = await sendBroadcastNotification({
-        employee: person,
-        authorName: req.user.full_name,
-        message,
-      });
-      results.push({ id: person.id, full_name: person.full_name, status });
-    } catch (error) {
-      console.error(`Broadcast WhatsApp failed for user ${person.id}:`, error.message);
-      results.push({ id: person.id, full_name: person.full_name, status: "failed" });
-    }
-    // Small pause so WhatsApp does not see a burst of messages.
-    await new Promise((resolve) => setTimeout(resolve, BROADCAST_DELAY_MS));
+  const key = broadcastKey(req.user.id, audience, from, to, message);
+  const previous = recentBroadcasts.get(key);
+  if (previous && Date.now() - previous < BROADCAST_DUPLICATE_WINDOW_MS) {
+    const minutes = Math.max(1, Math.round((Date.now() - previous) / 60000));
+    throw new ApiError(
+      409,
+      `This same message was already sent to this group ${minutes} minute(s) ago. It is probably still being delivered. Change the message if you really want to send it again.`
+    );
   }
+  recentBroadcasts.set(key, Date.now());
 
-  const count = (status) => results.filter((item) => item.status === status).length;
-  res.json({
-    counts: {
-      total: results.length,
-      sent: count("sent"),
-      no_phone: count("no_phone"),
-      failed: count("failed"),
-      disabled: count("disabled"),
-    },
-    results,
+  const reachable = targets.filter((person) => person.phone).length;
+
+  // Reply now and deliver in the background so a slow WhatsApp provider
+  // cannot make the request time out (which led to repeated sends).
+  res.status(202).json({
+    started: true,
+    total: targets.length,
+    will_send: reachable,
+    no_phone: targets.length - reachable,
+  });
+
+  deliverBroadcast({
+    targets,
+    authorName: req.user.full_name,
+    message,
+    key,
+  }).catch((error) => {
+    console.error("Broadcast failed:", error);
+    recentBroadcasts.delete(key);
   });
 });
 

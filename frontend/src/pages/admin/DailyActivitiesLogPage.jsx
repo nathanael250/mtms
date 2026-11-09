@@ -123,7 +123,7 @@ function BroadcastModal({ range, token, onClose }) {
         token,
         body: { audience, message: message.trim(), from: range.from, to: range.to },
       });
-      setResult(data.counts);
+      setResult(data);
     } catch (sendError) {
       setError(sendError.message);
     } finally {
@@ -154,10 +154,8 @@ function BroadcastModal({ range, token, onClose }) {
         {result ? (
           <div className="mt-5 space-y-3">
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-              {result.disabled
-                ? "WhatsApp notifications are disabled on the server, so nothing was sent."
-                : `Message sent to ${result.sent} of ${result.total} staff member(s).`}
-              {result.failed ? ` ${result.failed} failed.` : ""}
+              Sending to {result.will_send} staff member(s). Messages go out one by one in
+              the background, so it can take a minute or two. Please do not send it again.
               {result.no_phone ? ` ${result.no_phone} skipped (no phone number).` : ""}
             </div>
             <div className="flex justify-end">
