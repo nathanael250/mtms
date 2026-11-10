@@ -128,26 +128,17 @@ export default function DashboardLayout({ title, description, children }) {
     return (
       <>
         <div
-          className={`flex items-center gap-3 border-b border-white/10 px-[18px] py-[18px] ${
-            collapsed ? "justify-center px-3" : ""
+          className={`border-b border-white/10 px-[18px] py-[18px] ${
+            collapsed ? "flex justify-center px-3" : ""
           }`}
         >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[10px] bg-white/5">
-            <img
-              src={mopasLogo}
-              alt="Mopas logo"
-              className="h-7 w-auto object-contain"
-            />
-          </div>
+          <img
+            src={mopasLogo}
+            alt="MOPAS"
+            className={`w-auto object-contain object-left ${collapsed ? "h-7" : "h-9"}`}
+          />
           {!collapsed ? (
-            <div className="min-w-0">
-              <p className="truncate text-[13px] font-bold leading-tight text-slate-100">
-                MOPAS
-              </p>
-              <p className="mt-1 text-[10px] text-slate-400">
-                Task management system
-              </p>
-            </div>
+            <p className="mt-2 text-[11px] text-slate-400">Task management system</p>
           ) : null}
         </div>
 
