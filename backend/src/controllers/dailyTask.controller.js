@@ -128,6 +128,9 @@ export const createDailyTask = asyncHandler(async (req, res) => {
 
 export const listDailyTasks = asyncHandler(async (req, res) => {
   const date = getRequestedDate(req.query.date) || getTodayYmd();
+  if (date === getTodayYmd()) {
+    await materializeCarryOvers({ userId: req.user.id });
+  }
 
   const [tasks] = await getPool().query(
     `SELECT daily_tasks.*,
@@ -411,10 +414,10 @@ export const deleteDailyTask = asyncHandler(async (req, res) => {
     [taskId, taskId, req.user.id]
   );
 
-  // Deleting a carried-over copy makes the original available to carry over again.
+  // Deleting a carried-over copy gives up the carry (it must not come back by itself).
   if (rows[0].carried_from_id) {
     await getPool().query(
-      "UPDATE daily_tasks SET carried_to_id = NULL WHERE id = ? AND carried_to_id = ? AND user_id = ?",
+      "UPDATE daily_tasks SET carried_to_id = NULL, carry_over = 0 WHERE id = ? AND carried_to_id = ? AND user_id = ?",
       [rows[0].carried_from_id, taskId, req.user.id]
     );
   }
@@ -533,48 +536,13 @@ const UNFINISHED_SQL = `
 
 const CARRY_OVER_LOOKBACK_DAYS = 14;
 
-// Unfinished planned tasks from earlier days that have not been carried over yet.
-export const listUnfinishedTasks = asyncHandler(async (req, res) => {
-  const today = getTodayYmd();
-  const [tasks] = await getPool().query(
-    `SELECT task.*, DATE_FORMAT(task.created_date, '%Y-%m-%d') AS plan_day
-     FROM daily_tasks AS task
-     WHERE task.user_id = ?
-       AND task.parent_task_id IS NULL
-       AND task.created_date < ?
-       AND task.created_date >= DATE_SUB(?, INTERVAL ${CARRY_OVER_LOOKBACK_DAYS} DAY)
-       AND task.carried_to_id IS NULL
-       AND ${UNFINISHED_SQL}
-     ORDER BY task.created_date DESC, task.sort_order IS NULL, task.sort_order ASC, task.id ASC`,
-    [req.user.id, today, today]
-  );
+// Employee marks (or unmarks) an unfinished task to continue on the next day.
+// This can only be done while the day is open, so the decision is made on the day itself.
+export const setCarryOver = asyncHandler(async (req, res) => {
+  const wanted = req.body.carry_over !== false;
 
-  let todos = [];
-  if (tasks.length) {
-    const [rows] = await getPool().query(
-      `SELECT id, parent_task_id, description, is_completed
-       FROM daily_tasks WHERE user_id = ? AND parent_task_id IN (?)
-       ORDER BY sort_order IS NULL, sort_order ASC, id ASC`,
-      [req.user.id, tasks.map((task) => task.id)]
-    );
-    todos = rows;
-  }
-
-  res.json({
-    today,
-    tasks: tasks.map((task) => ({
-      ...task,
-      todo_items: todos.filter((todo) => todo.parent_task_id === task.id),
-    })),
-  });
-});
-
-// Continues an unfinished task from an earlier day on today: a new task is created for today
-// with only the to-dos that are still open. The old day is left exactly as it was.
-export const carryOverDailyTask = asyncHandler(async (req, res) => {
-  const today = getTodayYmd();
   const [rows] = await getPool().query(
-    `SELECT task.*, ${PLAN_DAY_SQL.replace("created_date", "task.created_date")},
+    `SELECT task.id, task.carried_to_id, ${PLAN_DAY_SQL.replace("created_date", "task.created_date")},
             (${UNFINISHED_SQL}) AS is_unfinished
      FROM daily_tasks AS task
      WHERE task.id = ? AND task.user_id = ? AND task.parent_task_id IS NULL`,
@@ -585,66 +553,90 @@ export const carryOverDailyTask = asyncHandler(async (req, res) => {
   }
   const task = rows[0];
 
-  if (task.plan_day >= today) {
-    throw new ApiError(400, "Only tasks from earlier days can be carried over.");
-  }
+  await assertDayEditable(req.user.id, task.plan_day);
   if (task.carried_to_id) {
     throw new ApiError(400, "This task was already carried over.");
   }
-  if (!task.is_unfinished) {
-    throw new ApiError(400, "This task is already finished, so there is nothing to carry over.");
+  if (wanted && !task.is_unfinished) {
+    throw new ApiError(400, "This task is finished, so there is nothing to carry over.");
   }
 
-  const [openTodos] = await getPool().query(
-    `SELECT description FROM daily_tasks
-     WHERE parent_task_id = ? AND user_id = ? AND is_completed = 0
-     ORDER BY sort_order IS NULL, sort_order ASC, id ASC`,
-    [task.id, req.user.id]
-  );
+  await getPool().query("UPDATE daily_tasks SET carry_over = ? WHERE id = ?", [
+    wanted ? 1 : 0,
+    task.id,
+  ]);
 
-  const connection = await getPool().getConnection();
-  let newId;
-  try {
-    await connection.beginTransaction();
-
-    // Claim the original first so two quick clicks cannot create two copies.
-    const [claim] = await connection.query(
-      "UPDATE daily_tasks SET carried_to_id = 0 WHERE id = ? AND carried_to_id IS NULL",
-      [task.id]
-    );
-    if (!claim.affectedRows) {
-      throw new ApiError(400, "This task was already carried over.");
-    }
-
-    const [created] = await connection.query(
-      `INSERT INTO daily_tasks (user_id, description, planned_time, created_date, carried_from_id)
-       VALUES (?, ?, ?, ?, ?)`,
-      [req.user.id, task.description, task.planned_time, today, task.id]
-    );
-    newId = created.insertId;
-
-    for (const todo of openTodos) {
-      await connection.query(
-        `INSERT INTO daily_tasks (user_id, parent_task_id, description, created_date)
-         VALUES (?, ?, ?, ?)`,
-        [req.user.id, newId, todo.description, today]
-      );
-    }
-
-    await connection.query("UPDATE daily_tasks SET carried_to_id = ? WHERE id = ?", [
-      newId,
-      task.id,
-    ]);
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-
-  res.status(201).json({
-    message: "Task carried over to today.",
-    task: { id: newId, description: task.description, created_date: today },
+  res.json({
+    message: wanted
+      ? "This task will continue on the next day."
+      : "This task will not be carried over.",
+    carry_over: wanted,
   });
 });
+
+// Creates today's copy of every task that was marked to continue and is still unfinished.
+// The copy holds only the to-dos that are still open; the old day is left untouched.
+// Runs whenever plans are loaded, so it works even if nobody opens the page first thing.
+export async function materializeCarryOvers({ userId = null } = {}) {
+  const today = getTodayYmd();
+  const [due] = await getPool().query(
+    `SELECT task.id, task.user_id, task.description, task.planned_time,
+            (${UNFINISHED_SQL}) AS is_unfinished
+     FROM daily_tasks AS task
+     WHERE task.parent_task_id IS NULL
+       AND task.carry_over = 1
+       AND task.carried_to_id IS NULL
+       AND task.created_date < ?
+       AND task.created_date >= DATE_SUB(?, INTERVAL ${CARRY_OVER_LOOKBACK_DAYS} DAY)
+       ${userId ? "AND task.user_id = ?" : ""}`,
+    userId ? [today, today, userId] : [today, today]
+  );
+
+  for (const task of due) {
+    if (!task.is_unfinished) continue;
+
+    const connection = await getPool().getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // Claim the original first so parallel page loads cannot create two copies.
+      const [claim] = await connection.query(
+        "UPDATE daily_tasks SET carried_to_id = 0 WHERE id = ? AND carried_to_id IS NULL",
+        [task.id]
+      );
+      if (!claim.affectedRows) {
+        await connection.rollback();
+        continue;
+      }
+
+      const [openTodos] = await connection.query(
+        `SELECT description FROM daily_tasks
+         WHERE parent_task_id = ? AND is_completed = 0
+         ORDER BY sort_order IS NULL, sort_order ASC, id ASC`,
+        [task.id]
+      );
+      const [created] = await connection.query(
+        `INSERT INTO daily_tasks (user_id, description, planned_time, created_date, carried_from_id)
+         VALUES (?, ?, ?, ?, ?)`,
+        [task.user_id, task.description, task.planned_time, today, task.id]
+      );
+      for (const todo of openTodos) {
+        await connection.query(
+          `INSERT INTO daily_tasks (user_id, parent_task_id, description, created_date)
+           VALUES (?, ?, ?, ?)`,
+          [task.user_id, created.insertId, todo.description, today]
+        );
+      }
+      await connection.query("UPDATE daily_tasks SET carried_to_id = ? WHERE id = ?", [
+        created.insertId,
+        task.id,
+      ]);
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      console.error(`Carry-over failed for task ${task.id}:`, error.message);
+    } finally {
+      connection.release();
+    }
+  }
+}

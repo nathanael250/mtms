@@ -2,6 +2,7 @@ import { getPool } from "../config/database.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 import { getTodayYmd } from "../utils/today.js";
+import { materializeCarryOvers } from "./dailyTask.controller.js";
 import {
   sendBroadcastNotification,
   sendPlanCommentNotification,
@@ -53,6 +54,7 @@ function percent(part, whole) {
 }
 
 export const getActivityOverview = asyncHandler(async (req, res) => {
+  await materializeCarryOvers();
   const { from, to, fromDate, toDate } = getRange(req.query);
   const pool = getPool();
 
@@ -169,6 +171,7 @@ export const getActivityOverview = asyncHandler(async (req, res) => {
 });
 
 export const getEmployeeActivity = asyncHandler(async (req, res) => {
+  await materializeCarryOvers({ userId: Number(req.params.userId) });
   const { from, to } = getRange(req.query);
   const pool = getPool();
 

@@ -8,8 +8,7 @@ import {
   deleteDailyTask,
   updateDailyTask,
   reorderDailyTasks,
-  listUnfinishedTasks,
-  carryOverDailyTask,
+  setCarryOver,
   saveDayReport,
   uploadDayReportFile,
   deleteDayReportFile,
@@ -49,8 +48,7 @@ router.delete(
 );
 router.put("/day-report", saveDayReport);
 router.put("/reorder", reorderDailyTasks);
-router.get("/unfinished", listUnfinishedTasks);
-router.post("/:id/carry-over", carryOverDailyTask);
+router.patch("/:id/carry-over", setCarryOver);
 router.post("/day-report/files", uploadSingleAttachment, uploadDayReportFile);
 router.delete("/day-report/files/:id", deleteDayReportFile);
 router.post("/", createDailyTask);
