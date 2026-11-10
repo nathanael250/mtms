@@ -93,6 +93,8 @@ export default function TasksPage() {
   const [plannedTag, setPlannedTag] = useState({ on: false, userId: "", message: "" });
   const [cardTag, setCardTag] = useState(null); // { taskId, userId, message }
   const [isTagging, setIsTagging] = useState(false);
+  const [unfinished, setUnfinished] = useState([]);
+  const [carryingId, setCarryingId] = useState(null);
   const [plannedDate, setPlannedDate] = useState(getDateInputValue());
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [taskForm, setTaskForm] = useState(initialTaskForm);
@@ -191,9 +193,56 @@ export default function TasksPage() {
       setDayReport(data.day_report || null);
       setDayFiles(data.day_files || []);
       setDaySummary(data.day_report?.summary || "");
+
+      // Offer to continue unfinished work from earlier days when looking at today.
+      if (data.is_today) {
+        try {
+          const open = await apiFetch("/daily-tasks/unfinished", { token });
+          setUnfinished(open.tasks || []);
+        } catch {
+          setUnfinished([]);
+        }
+      } else {
+        setUnfinished([]);
+      }
     } catch (loadError) {
       setError(loadError.message);
     }
+  }
+
+  // Continues an unfinished task from an earlier day on today's plan.
+  async function handleCarryOver(taskId, { reload = true } = {}) {
+    setError("");
+    setSuccess("");
+    setCarryingId(taskId);
+    try {
+      await apiFetch(`/daily-tasks/${taskId}/carry-over`, { method: "POST", token });
+      if (reload) {
+        setSuccess("Task carried over to today.");
+        // Go to today, where the continued task now is.
+        setPlannedDate(getDateInputValue());
+        await loadPlannedTasks();
+      }
+      return true;
+    } catch (carryError) {
+      setError(carryError.message);
+      return false;
+    } finally {
+      setCarryingId(null);
+    }
+  }
+
+  async function handleCarryAll() {
+    setError("");
+    setSuccess("");
+    let moved = 0;
+    for (const task of unfinished) {
+      if (await handleCarryOver(task.id, { reload: false })) moved += 1;
+    }
+    if (moved) {
+      setSuccess(`${moved} task${moved === 1 ? "" : "s"} carried over to today.`);
+    }
+    await loadPlannedTasks();
   }
 
   useEffect(() => {
@@ -1065,6 +1114,59 @@ export default function TasksPage() {
                   </div>
                 ) : null}
 
+                {isPlannedToday && unfinished.length ? (
+                  <div className="app-panel mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-amber-900">
+                        {unfinished.length} unfinished task{unfinished.length === 1 ? "" : "s"} from
+                        earlier days
+                      </p>
+                      {unfinished.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={handleCarryAll}
+                          disabled={carryingId !== null}
+                          className="rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+                        >
+                          Carry all to today
+                        </button>
+                      ) : null}
+                    </div>
+                    <ul className="mt-3 space-y-2">
+                      {unfinished.map((task) => {
+                        const open = (task.todo_items || []).filter((item) => !item.is_completed);
+                        return (
+                          <li
+                            key={task.id}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-100 bg-white px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-slate-900">{task.description}</p>
+                              <p className="text-xs text-slate-500">
+                                From {formatDate(task.plan_day)}
+                                {open.length
+                                  ? ` · ${open.length} to-do${open.length === 1 ? "" : "s"} still open`
+                                  : ""}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleCarryOver(task.id)}
+                              disabled={carryingId !== null}
+                              className="rounded-xl border border-amber-300 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-60"
+                            >
+                              {carryingId === task.id ? "Carrying..." : "Carry over to today"}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <p className="mt-2 text-xs text-amber-800">
+                      The old day stays as it was. Only the to-dos still open are copied to today.
+                    </p>
+                  </div>
+                ) : null}
+
                 <div className="mt-5 space-y-3">
                   {plannedTasks.map((task, taskIndex) => {
                     const todoItems = task.todo_items || [];
@@ -1166,6 +1268,27 @@ export default function TasksPage() {
                                 No todo items added inside this task.
                               </p>
                             )}
+
+                            {task.carried_from_date ? (
+                              <p className="mt-2 text-xs font-medium text-amber-700">
+                                Continued from {formatDate(task.carried_from_date)}
+                              </p>
+                            ) : null}
+                            {task.carried_to_id ? (
+                              <p className="mt-2 text-xs font-medium text-amber-700">
+                                Carried over to a later day
+                              </p>
+                            ) : null}
+                            {!isPlannedToday && !isTaskDone && !task.carried_to_id ? (
+                              <button
+                                type="button"
+                                onClick={() => handleCarryOver(task.id)}
+                                disabled={carryingId !== null}
+                                className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-50 disabled:opacity-60"
+                              >
+                                {carryingId === task.id ? "Carrying..." : "Carry over to today"}
+                              </button>
+                            ) : null}
 
                             {(task.mentions || []).map((mention) => (
                               <div

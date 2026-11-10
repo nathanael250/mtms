@@ -206,6 +206,9 @@ async function ensureDailyTaskSchema() {
     "ALTER TABLE daily_tasks ADD COLUMN parent_task_id BIGINT NULL AFTER user_id",
     "ALTER TABLE daily_tasks ADD COLUMN planned_time TIME NULL AFTER description",
     "ALTER TABLE daily_tasks ADD COLUMN sort_order INT NULL",
+    // Carry-over: the new task points back to the original, and the original to the new one.
+    "ALTER TABLE daily_tasks ADD COLUMN carried_from_id BIGINT NULL",
+    "ALTER TABLE daily_tasks ADD COLUMN carried_to_id BIGINT NULL",
   ]) {
     try {
       await pool.query(statement);
