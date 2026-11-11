@@ -58,3 +58,13 @@ export const uploadSingleAttachment = multer({
   fileFilter,
   limits: { fileSize: 25 * 1024 * 1024 },
 }).single("file");
+
+// Job forms: several documents at once ("files"); "file" kept for older callers.
+export const uploadJobDocuments = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 25 * 1024 * 1024 },
+}).fields([
+  { name: "files", maxCount: 20 },
+  { name: "file", maxCount: 1 },
+]);

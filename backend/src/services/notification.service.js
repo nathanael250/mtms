@@ -292,3 +292,31 @@ export async function sendBroadcastNotification({ employee, authorName, message 
   });
   return result.skipped ? "disabled" : "sent";
 }
+
+// Short heads-up to a staff member who is not assigned a task on a new job.
+// Throws if WhatsApp delivery fails. Returns "sent", "disabled" or "no_phone".
+export async function sendJobNotifyNotification({ recipient, job, authorName }) {
+  if (!recipient.phone) {
+    return "no_phone";
+  }
+  const name = String(recipient.full_name || "").trim().split(/\s+/)[0] || "there";
+  const dates = [job.start_date, job.end_date]
+    .map((value) => (value ? new Date(value).toISOString().slice(0, 10) : null))
+    .filter(Boolean)
+    .join(" to ");
+  const lines = [
+    `Hello ${name},`,
+    `You are being notified by MOPAS Task Management about a new job created by ${authorName}.`,
+    "",
+    `Job: ${job.title} (${job.job_code})`,
+  ];
+  if (dates) lines.push(`Period: ${dates}`);
+  const description = String(job.description || "").trim();
+  if (description) {
+    lines.push(`Details: ${description.length > 140 ? `${description.slice(0, 137)}...` : description}`);
+  }
+  lines.push("", "For your information. No task has been assigned to you.");
+
+  const result = await sendWhatsapp({ to: recipient.phone, text: lines.join("\n") });
+  return result.skipped ? "disabled" : "sent";
+}

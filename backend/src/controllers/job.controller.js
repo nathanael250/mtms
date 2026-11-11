@@ -1,5 +1,6 @@
 import { getPool } from "../config/database.js";
 import { createActivityLog } from "../services/activityLog.service.js";
+import { sendJobNotifyNotification } from "../services/notification.service.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 
@@ -21,6 +22,59 @@ async function getJobOrThrow(jobId) {
   return rows[0];
 }
 
+function relativePath(file) {
+  return file.path.replace(`${process.cwd()}/`, "");
+}
+
+function collectUploadedFiles(req) {
+  const grouped = req.files || {};
+  return [...(grouped.files || []), ...(grouped.file || [])];
+}
+
+// The first document stays in jobs.approval_document; extra ones become attachments.
+async function saveExtraDocuments(jobId, files, userId) {
+  for (const file of files) {
+    await getPool().query(
+      `INSERT INTO attachments (related_type, related_id, file_name, file_path, file_type, uploaded_by)
+       VALUES ('job', ?, ?, ?, ?, ?)`,
+      [jobId, file.originalname.slice(0, 255), relativePath(file), file.mimetype, userId]
+    );
+  }
+}
+
+// notify_user_ids arrives as a comma-separated string (multipart form) or an array.
+function parseIdList(value) {
+  const raw = Array.isArray(value) ? value : String(value || "").split(",");
+  return [...new Set(raw.map((item) => Number(item)).filter((id) => Number.isInteger(id) && id > 0))];
+}
+
+async function notifyStaffAboutJob(job, userIds, authorName) {
+  const summary = { sent: 0, failed: 0, no_phone: 0, disabled: 0 };
+  if (!userIds.length) return summary;
+
+  const [recipients] = await getPool().query(
+    `SELECT id, full_name, phone FROM users WHERE id IN (?) AND status = 'active'`,
+    [userIds]
+  );
+  const results = await Promise.allSettled(
+    recipients.map((recipient) =>
+      sendJobNotifyNotification({ recipient, job, authorName })
+    )
+  );
+  results.forEach((result, index) => {
+    if (result.status === "fulfilled") {
+      summary[result.value] += 1;
+    } else {
+      summary.failed += 1;
+      console.error(
+        `Job notify failed for user ${recipients[index].id}:`,
+        result.reason?.message || result.reason
+      );
+    }
+  });
+  return summary;
+}
+
 async function generateJobCode() {
   const prefix = `JOB-${new Date().getFullYear()}-`;
   const [rows] = await getPool().query(
@@ -34,9 +88,8 @@ async function generateJobCode() {
 
 export const createJob = asyncHandler(async (req, res) => {
   const { title, description, start_date, end_date, created_by } = req.body;
-  const approvalDocument = req.file
-    ? req.file.path.replace(`${process.cwd()}/`, "")
-    : null;
+  const uploadedFiles = collectUploadedFiles(req);
+  const approvalDocument = uploadedFiles.length ? relativePath(uploadedFiles[0]) : null;
 
   let result;
   for (let attempt = 1; ; attempt += 1) {
@@ -62,6 +115,8 @@ export const createJob = asyncHandler(async (req, res) => {
     }
   }
 
+  await saveExtraDocuments(result.insertId, uploadedFiles.slice(1), req.user.id);
+
   await createActivityLog({
     jobId: result.insertId,
     userId: created_by,
@@ -70,10 +125,16 @@ export const createJob = asyncHandler(async (req, res) => {
   });
 
   const job = await getJobOrThrow(result.insertId);
+  const notified = await notifyStaffAboutJob(
+    job,
+    parseIdList(req.body.notify_user_ids),
+    req.user.full_name
+  );
 
   res.status(201).json({
     message: "Job created successfully.",
     job,
+    notified,
   });
 });
 
@@ -127,7 +188,8 @@ export const getJobById = asyncHandler(async (req, res) => {
 
 export const updateJob = asyncHandler(async (req, res) => {
   const { job_code, title, description, start_date, end_date, status } = req.body;
-  await getJobOrThrow(req.params.id);
+  const existingJob = await getJobOrThrow(req.params.id);
+  const uploadedFiles = collectUploadedFiles(req);
 
   const updates = [];
   const values = [];
@@ -163,18 +225,23 @@ export const updateJob = asyncHandler(async (req, res) => {
     updates.push("status = ?");
     values.push(status);
   }
-  if (req.file) {
+  let extraFiles = uploadedFiles;
+  if (uploadedFiles.length && !existingJob.approval_document) {
     updates.push("approval_document = ?");
-    values.push(req.file.path.replace(`${process.cwd()}/`, ""));
+    values.push(relativePath(uploadedFiles[0]));
+    extraFiles = uploadedFiles.slice(1);
   }
 
-  if (!updates.length) {
+  if (!updates.length && !extraFiles.length) {
     throw new ApiError(400, "No valid job fields were provided.");
   }
 
   values.push(req.params.id);
 
-  await getPool().query(`UPDATE jobs SET ${updates.join(", ")} WHERE id = ?`, values);
+  if (updates.length) {
+    await getPool().query(`UPDATE jobs SET ${updates.join(", ")} WHERE id = ?`, values);
+  }
+  await saveExtraDocuments(Number(req.params.id), extraFiles, req.user.id);
 
   await createActivityLog({
     jobId: Number(req.params.id),

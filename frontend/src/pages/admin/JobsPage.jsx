@@ -26,7 +26,8 @@ export default function JobsPage() {
   const [staff, setStaff] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [taskAssignments, setTaskAssignments] = useState([emptyTaskAssignment]);
-  const [approvalFile, setApprovalFile] = useState(null);
+  const [approvalFiles, setApprovalFiles] = useState([]);
+  const [notifyIds, setNotifyIds] = useState([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -71,9 +72,13 @@ export default function JobsPage() {
       }).forEach(([key, value]) => {
         formData.append(key, value);
       });
-      if (approvalFile) {
+      if (approvalFiles.length) {
         formData.append("related_type", "job");
-        formData.append("file", approvalFile);
+        approvalFiles.forEach((file) => formData.append("files", file));
+      }
+
+      if (notifyIds.length) {
+        formData.append("notify_user_ids", notifyIds.join(","));
       }
 
       const jobResponse = await apiFetch("/jobs", {
@@ -114,14 +119,23 @@ export default function JobsPage() {
 
       setForm(initialForm);
       setTaskAssignments([emptyTaskAssignment]);
-      setApprovalFile(null);
+      setApprovalFiles([]);
+      setNotifyIds([]);
       setIsModalOpen(false);
+      const notified = jobResponse.notified || {};
+      const notifyNote = notifyIds.length
+        ? ` WhatsApp sent to ${notified.sent || 0} of ${notifyIds.length} notified staff${
+            notified.failed || notified.no_phone || notified.disabled
+              ? " (some could not be reached)"
+              : ""
+          }.`
+        : "";
       setSuccess(
-        validTaskAssignments.length
+        (validTaskAssignments.length
           ? `Job created and ${validTaskAssignments.length} task${
               validTaskAssignments.length === 1 ? "" : "s"
             } assigned successfully.`
-          : "Job created successfully."
+          : "Job created successfully.") + notifyNote
       );
       loadJobs();
     } catch (submitError) {
@@ -142,7 +156,8 @@ export default function JobsPage() {
     setError("");
     setForm(initialForm);
     setTaskAssignments([emptyTaskAssignment]);
-    setApprovalFile(null);
+    setApprovalFiles([]);
+      setNotifyIds([]);
   }
 
   function updateTaskAssignment(index, field, value) {
@@ -467,18 +482,77 @@ export default function JobsPage() {
                     ))}
                   </div>
 
-                  <label className="block">
+                  <div className="block">
                     <span className="mb-2 block text-sm font-medium text-slate-600">
-                      Approval Document
+                      Documents
                     </span>
                     <input
                       type="file"
-                      onChange={(event) =>
-                        setApprovalFile(event.target.files?.[0] || null)
-                      }
+                      multiple
+                      onChange={(event) => {
+                        const picked = Array.from(event.target.files || []);
+                        setApprovalFiles((current) => [...current, ...picked]);
+                        event.target.value = "";
+                      }}
                       className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
                     />
-                  </label>
+                    <p className="mt-1 text-xs text-slate-500">
+                      You can add several documents; pick more to add to the list.
+                    </p>
+                    {approvalFiles.length > 0 && (
+                      <ul className="mt-2 space-y-1">
+                        {approvalFiles.map((file, index) => (
+                          <li
+                            key={`${file.name}-${index}`}
+                            className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                          >
+                            <span className="truncate">{file.name}</span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setApprovalFiles((current) =>
+                                  current.filter((_, i) => i !== index)
+                                )
+                              }
+                              className="text-xs font-semibold text-red-600"
+                            >
+                              Remove
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+
+                <div className="app-panel rounded-[24px] border border-slate-200 bg-white p-4">
+                  <h3 className="text-base font-semibold text-slate-900">
+                    Notify other staff
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    They get a short WhatsApp message about this job. No task is assigned to them.
+                  </p>
+                  <div className="mt-3 grid max-h-40 gap-2 overflow-y-auto sm:grid-cols-2">
+                    {staff.map((member) => (
+                      <label
+                        key={member.id}
+                        className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={notifyIds.includes(member.id)}
+                          onChange={(event) =>
+                            setNotifyIds((current) =>
+                              event.target.checked
+                                ? [...current, member.id]
+                                : current.filter((id) => id !== member.id)
+                            )
+                          }
+                        />
+                        <span className="truncate">{member.full_name}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="app-panel rounded-[24px] border border-[var(--brand-100)] bg-[var(--brand-50)] p-4">

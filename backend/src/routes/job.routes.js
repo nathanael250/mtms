@@ -12,7 +12,7 @@ import {
   updateJob,
 } from "../controllers/job.controller.js";
 import { authenticate, authorizeRoles } from "../middlewares/auth.middleware.js";
-import { uploadSingleAttachment } from "../middlewares/upload.middleware.js";
+import { uploadJobDocuments } from "../middlewares/upload.middleware.js";
 import { validateRequest } from "../middlewares/validation.middleware.js";
 import {
   approveRejectJobValidator,
@@ -28,7 +28,7 @@ router.get("/", listJobs);
 router.post(
   "/",
   authorizeRoles("admin"),
-  uploadSingleAttachment,
+  uploadJobDocuments,
   createJobValidator,
   validateRequest,
   createJob
@@ -38,7 +38,7 @@ router.get("/:id/progress", getJobProgress);
 router.put(
   "/:id",
   authorizeRoles("admin"),
-  uploadSingleAttachment,
+  uploadJobDocuments,
   updateJobValidator,
   validateRequest,
   updateJob
