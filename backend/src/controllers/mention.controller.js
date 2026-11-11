@@ -1,5 +1,4 @@
 import { getPool } from "../config/database.js";
-import { env } from "../config/env.js";
 import { createActivityLog } from "../services/activityLog.service.js";
 import fs from "fs/promises";
 import {
@@ -131,13 +130,13 @@ export const createPlannedMention = asyncHandler(async (req, res) => {
   }
   const [taggedUsers] = await getPool().query(
     `SELECT users.id, users.full_name, users.email, users.phone
-     FROM users WHERE users.id = ? AND users.status = 'active' LIMIT 1`,
+     FROM users JOIN roles ON roles.id = users.role_id
+     WHERE users.id = ? AND users.status = 'active'
+       AND (roles.name = 'staff' OR users.can_receive_help = 1)
+     LIMIT 1`,
     [req.body.mentioned_user_id]
   );
-  if (
-    !taggedUsers.length ||
-    env.mentionHiddenEmails.includes(String(taggedUsers[0].email || "").toLowerCase())
-  ) {
+  if (!taggedUsers.length) {
     throw new ApiError(404, "That staff member was not found.");
   }
 

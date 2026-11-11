@@ -11,6 +11,7 @@ const initialForm = {
   password: "",
   role_id: "2",
   status: "active",
+  can_receive_help: false,
 };
 
 export default function UsersPage() {
@@ -119,6 +120,7 @@ export default function UsersPage() {
       password: "",
       role_id: String(user.role_id),
       status: user.status || "active",
+      can_receive_help: Boolean(user.can_receive_help),
     });
     setIsModalOpen(true);
   }
@@ -236,7 +238,14 @@ export default function UsersPage() {
                       {user.full_name}
                     </td>
                     <td className="py-3 text-slate-600">{user.email}</td>
-                    <td className="py-3 capitalize text-slate-600">{user.role}</td>
+                    <td className="py-3 capitalize text-slate-600">
+                      {user.role}
+                      {user.role === "admin" && user.can_receive_help ? (
+                        <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold normal-case text-emerald-700">
+                          gets help requests
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="py-3 capitalize text-slate-600">{user.status}</td>
                     <td className="py-3">
                       <div className="flex justify-end gap-2">
@@ -351,6 +360,29 @@ export default function UsersPage() {
                   ))}
                 </select>
               </label>
+
+              {String(form.role_id) === "1" ? (
+                <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(form.can_receive_help)}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        can_receive_help: event.target.checked,
+                      }))
+                    }
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Can be asked for help
+                    <span className="block text-xs text-slate-500">
+                      When ticked, staff can pick this admin in "Ask for help" on their planned
+                      tasks. Leave it off for technical or duplicate admin accounts.
+                    </span>
+                  </span>
+                </label>
+              ) : null}
 
               <label className="block">
                 <span className="mb-2 block text-sm font-medium text-slate-600">

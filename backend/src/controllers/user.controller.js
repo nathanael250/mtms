@@ -20,14 +20,21 @@ export function buildCredentialPassword(fullName, phone) {
 
 const baseUserSelect = `
   SELECT users.id, users.role_id, roles.name AS role, users.full_name, users.email,
-         users.phone, users.status, users.created_at, users.updated_at
+         users.phone, users.status, users.can_receive_help, users.created_at, users.updated_at
   FROM users
   JOIN roles ON roles.id = users.role_id
 `;
 
 export const createUser = asyncHandler(async (req, res) => {
-  const { role_id, full_name, email, phone, password, status = "active" } =
-    req.body;
+  const {
+    role_id,
+    full_name,
+    email,
+    phone,
+    password,
+    status = "active",
+    can_receive_help = false,
+  } = req.body;
 
   const [existing] = await getPool().query(
     "SELECT id FROM users WHERE email = ? LIMIT 1",
@@ -40,9 +47,9 @@ export const createUser = asyncHandler(async (req, res) => {
 
   const hashedPassword = await bcrypt.hash(password, 10);
   const [result] = await getPool().query(
-    `INSERT INTO users (role_id, full_name, email, phone, password, status)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [role_id, full_name, email, phone || null, hashedPassword, status]
+    `INSERT INTO users (role_id, full_name, email, phone, password, status, can_receive_help)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [role_id, full_name, email, phone || null, hashedPassword, status, can_receive_help ? 1 : 0]
   );
 
   const [rows] = await getPool().query(
@@ -68,16 +75,15 @@ export const listStaff = asyncHandler(async (_req, res) => {
   res.json({ users: rows });
 });
 
-// People who can be asked for help on a planned task: every active staff member and admin.
+// People who can be asked for help on a planned task: all active staff, plus the admins
+// that have "can receive help requests" switched on.
 export const listMentionable = asyncHandler(async (_req, res) => {
-  const hidden = env.mentionHiddenEmails;
   const [rows] = await getPool().query(
     `SELECT users.id, users.full_name, roles.name AS role
      FROM users JOIN roles ON roles.id = users.role_id
      WHERE users.status = 'active'
-       ${hidden.length ? "AND LOWER(users.email) NOT IN (?)" : ""}
-     ORDER BY users.full_name ASC`,
-    hidden.length ? [hidden] : []
+       AND (roles.name = 'staff' OR users.can_receive_help = 1)
+     ORDER BY users.full_name ASC`
   );
   res.json({ users: rows });
 });
@@ -96,7 +102,8 @@ export const getUserById = asyncHandler(async (req, res) => {
 });
 
 export const updateUser = asyncHandler(async (req, res) => {
-  const { full_name, email, phone, password, role_id, status } = req.body;
+  const { full_name, email, phone, password, role_id, status, can_receive_help } =
+    req.body;
   const [existing] = await getPool().query(
     "SELECT id, role_id FROM users WHERE id = ? LIMIT 1",
     [req.params.id]
@@ -148,6 +155,10 @@ export const updateUser = asyncHandler(async (req, res) => {
   if (status !== undefined) {
     updates.push("status = ?");
     values.push(status);
+  }
+  if (can_receive_help !== undefined) {
+    updates.push("can_receive_help = ?");
+    values.push(can_receive_help ? 1 : 0);
   }
   if (password) {
     const hashedPassword = await bcrypt.hash(password, 10);

@@ -12,6 +12,7 @@ export const createUserValidator = [
     .optional()
     .isIn(["active", "inactive"])
     .withMessage("Invalid user status."),
+  body("can_receive_help").optional().isBoolean(),
 ];
 
 export const updateUserValidator = [
@@ -24,5 +25,6 @@ export const updateUserValidator = [
   body("role_id").optional().isInt({ min: 1 }),
   body("status").optional().isIn(["active", "inactive"]),
   body("phone").optional({ values: "falsy" }).trim(),
+  body("can_receive_help").optional().isBoolean(),
 ];
 

@@ -278,6 +278,8 @@ async function ensureMentionFilesSchema() {
     "ALTER TABLE report_mentions MODIFY report_id BIGINT NULL",
     "ALTER TABLE report_mentions ADD COLUMN daily_task_id BIGINT NULL",
     "ALTER TABLE report_mentions ADD COLUMN source_title VARCHAR(255) NULL",
+    // Admins appear in the "Ask for help" list only when this is switched on for them.
+    "ALTER TABLE users ADD COLUMN can_receive_help TINYINT(1) NOT NULL DEFAULT 0",
   ]) {
     try {
       await pool.query(statement);
