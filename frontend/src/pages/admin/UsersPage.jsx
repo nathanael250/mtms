@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Eye, EyeOff, MessageCircle, Pencil, Plus, X } from "lucide-react";
+import { Eye, EyeOff, MessageCircle, Pencil, Plus, Trash2, X } from "lucide-react";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../lib/api";
@@ -66,6 +66,41 @@ export default function UsersPage() {
     } catch (submitError) {
       setError(submitError.message);
     }
+  }
+
+  async function handleDeleteUser(user) {
+    const ok = window.confirm(
+      `Delete ${user.full_name} permanently?\n\nTheir daily plans, reports and comments will be removed too. This cannot be undone.\n\nTo keep their history, set the status to inactive instead.`
+    );
+    if (!ok) {
+      return;
+    }
+
+    setError("");
+    setSuccess("");
+    try {
+      await apiFetch(`/users/${user.id}`, { method: "DELETE", token });
+      setSuccess(`${user.full_name} was deleted.`);
+      loadUsers();
+    } catch (deleteError) {
+      setError(deleteError.message);
+    }
+  }
+
+  function renderDeleteButton(user) {
+    if (user.id === currentUser?.id) {
+      return null;
+    }
+    return (
+      <button
+        type="button"
+        onClick={() => handleDeleteUser(user)}
+        className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+        Delete
+      </button>
+    );
   }
 
   async function handleSendCredentials(user) {
@@ -215,6 +250,7 @@ export default function UsersPage() {
                     Edit
                   </button>
                   {renderSendButton(user)}
+                  {renderDeleteButton(user)}
                 </div>
               </article>
             ))}
@@ -258,6 +294,7 @@ export default function UsersPage() {
                           Edit
                         </button>
                         {renderSendButton(user)}
+                        {renderDeleteButton(user)}
                       </div>
                     </td>
                   </tr>

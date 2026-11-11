@@ -189,17 +189,32 @@ export const updateUser = asyncHandler(async (req, res) => {
 });
 
 export const deleteUser = asyncHandler(async (req, res) => {
-  const [result] = await getPool().query("DELETE FROM users WHERE id = ?", [
+  if (Number(req.params.id) === req.user.id) {
+    throw new ApiError(400, "You cannot delete your own account.");
+  }
+
+  const [rows] = await getPool().query("SELECT id FROM users WHERE id = ? LIMIT 1", [
     req.params.id,
   ]);
-
-  if (!result.affectedRows) {
+  if (!rows.length) {
     throw new ApiError(404, "User not found.");
+  }
+
+  try {
+    await getPool().query("DELETE FROM users WHERE id = ?", [req.params.id]);
+  } catch (error) {
+    // Jobs, tasks and documents that point to this person are protected by the database.
+    if (error.errno === 1451 || error.code === "ER_ROW_IS_REFERENCED_2") {
+      throw new ApiError(
+        409,
+        "This user has jobs, tasks or documents linked to them, so they cannot be deleted. Set their status to inactive instead."
+      );
+    }
+    throw error;
   }
 
   res.json({ message: "User deleted successfully." });
 });
-
 
 export const sendCredentials = asyncHandler(async (req, res) => {
   const [rows] = await getPool().query(
