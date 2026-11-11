@@ -42,23 +42,47 @@ async function saveExtraDocuments(jobId, files, userId) {
   }
 }
 
-// notify_user_ids arrives as a comma-separated string (multipart form) or an array.
-function parseIdList(value) {
-  const raw = Array.isArray(value) ? value : String(value || "").split(",");
-  return [...new Set(raw.map((item) => Number(item)).filter((id) => Number.isInteger(id) && id > 0))];
+// `notifications` arrives as a JSON string (multipart form): [{ user_id, message }].
+function parseNotifications(value) {
+  let list = value;
+  if (typeof value === "string") {
+    try {
+      list = JSON.parse(value);
+    } catch {
+      throw new ApiError(400, "Invalid notification list.");
+    }
+  }
+  if (!Array.isArray(list)) return [];
+  const byUser = new Map();
+  for (const item of list) {
+    const id = Number(item?.user_id);
+    const message = String(item?.message || "").trim();
+    if (!Number.isInteger(id) || id < 1) continue;
+    if (!message) {
+      throw new ApiError(400, "Each notified staff member needs a message.");
+    }
+    byUser.set(id, message.slice(0, 1000));
+  }
+  return [...byUser].map(([user_id, message]) => ({ user_id, message }));
 }
 
-async function notifyStaffAboutJob(job, userIds, authorName) {
+async function notifyStaffAboutJob(job, notifications, authorName) {
   const summary = { sent: 0, failed: 0, no_phone: 0, disabled: 0 };
-  if (!userIds.length) return summary;
+  if (!notifications.length) return summary;
 
   const [recipients] = await getPool().query(
     `SELECT id, full_name, phone FROM users WHERE id IN (?) AND status = 'active'`,
-    [userIds]
+    [notifications.map((item) => item.user_id)]
   );
+  const messageFor = new Map(notifications.map((item) => [item.user_id, item.message]));
   const results = await Promise.allSettled(
     recipients.map((recipient) =>
-      sendJobNotifyNotification({ recipient, job, authorName })
+      sendJobNotifyNotification({
+        recipient,
+        job,
+        authorName,
+        message: messageFor.get(recipient.id),
+      })
     )
   );
   results.forEach((result, index) => {
@@ -88,6 +112,7 @@ async function generateJobCode() {
 
 export const createJob = asyncHandler(async (req, res) => {
   const { title, description, start_date, end_date, created_by } = req.body;
+  const notifications = parseNotifications(req.body.notifications);
   const uploadedFiles = collectUploadedFiles(req);
   const approvalDocument = uploadedFiles.length ? relativePath(uploadedFiles[0]) : null;
 
@@ -127,7 +152,7 @@ export const createJob = asyncHandler(async (req, res) => {
   const job = await getJobOrThrow(result.insertId);
   const notified = await notifyStaffAboutJob(
     job,
-    parseIdList(req.body.notify_user_ids),
+    notifications,
     req.user.full_name
   );
 

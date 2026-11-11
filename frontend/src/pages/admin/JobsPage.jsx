@@ -27,7 +27,7 @@ export default function JobsPage() {
   const [form, setForm] = useState(initialForm);
   const [taskAssignments, setTaskAssignments] = useState([emptyTaskAssignment]);
   const [approvalFiles, setApprovalFiles] = useState([]);
-  const [notifyIds, setNotifyIds] = useState([]);
+  const [notifyMessages, setNotifyMessages] = useState({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -77,8 +77,19 @@ export default function JobsPage() {
         approvalFiles.forEach((file) => formData.append("files", file));
       }
 
+      const notifyIds = Object.keys(notifyMessages).map(Number);
       if (notifyIds.length) {
-        formData.append("notify_user_ids", notifyIds.join(","));
+        const missing = notifyIds.find((id) => !notifyMessages[id]?.trim());
+        if (missing) {
+          const name = staff.find((member) => member.id === missing)?.full_name;
+          throw new Error(`Write the message for ${name || "each notified staff member"}.`);
+        }
+        formData.append(
+          "notifications",
+          JSON.stringify(
+            notifyIds.map((id) => ({ user_id: id, message: notifyMessages[id].trim() }))
+          )
+        );
       }
 
       const jobResponse = await apiFetch("/jobs", {
@@ -120,11 +131,12 @@ export default function JobsPage() {
       setForm(initialForm);
       setTaskAssignments([emptyTaskAssignment]);
       setApprovalFiles([]);
-      setNotifyIds([]);
+      setNotifyMessages({});
       setIsModalOpen(false);
       const notified = jobResponse.notified || {};
-      const notifyNote = notifyIds.length
-        ? ` WhatsApp sent to ${notified.sent || 0} of ${notifyIds.length} notified staff${
+      const notifyCount = Object.keys(notifyMessages).length;
+      const notifyNote = notifyCount
+        ? ` WhatsApp sent to ${notified.sent || 0} of ${notifyCount} notified staff${
             notified.failed || notified.no_phone || notified.disabled
               ? " (some could not be reached)"
               : ""
@@ -157,7 +169,7 @@ export default function JobsPage() {
     setForm(initialForm);
     setTaskAssignments([emptyTaskAssignment]);
     setApprovalFiles([]);
-      setNotifyIds([]);
+      setNotifyMessages({});
   }
 
   function updateTaskAssignment(index, field, value) {
@@ -530,28 +542,48 @@ export default function JobsPage() {
                     Notify other staff
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    They get a short WhatsApp message about this job. No task is assigned to them.
+                    Tick a person and write the message they will receive on WhatsApp. No task is assigned to them.
                   </p>
-                  <div className="mt-3 grid max-h-40 gap-2 overflow-y-auto sm:grid-cols-2">
-                    {staff.map((member) => (
-                      <label
-                        key={member.id}
-                        className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={notifyIds.includes(member.id)}
-                          onChange={(event) =>
-                            setNotifyIds((current) =>
-                              event.target.checked
-                                ? [...current, member.id]
-                                : current.filter((id) => id !== member.id)
-                            )
-                          }
-                        />
-                        <span className="truncate">{member.full_name}</span>
-                      </label>
-                    ))}
+                  <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
+                    {staff.map((member) => {
+                      const checked = member.id in notifyMessages;
+                      return (
+                        <div
+                          key={member.id}
+                          className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+                        >
+                          <label className="flex items-center gap-2 text-sm text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(event) =>
+                                setNotifyMessages((current) => {
+                                  const next = { ...current };
+                                  if (event.target.checked) next[member.id] = "";
+                                  else delete next[member.id];
+                                  return next;
+                                })
+                              }
+                            />
+                            <span className="truncate">{member.full_name}</span>
+                          </label>
+                          {checked && (
+                            <textarea
+                              rows={2}
+                              value={notifyMessages[member.id]}
+                              onChange={(event) =>
+                                setNotifyMessages((current) => ({
+                                  ...current,
+                                  [member.id]: event.target.value,
+                                }))
+                              }
+                              placeholder={`Message for ${member.full_name.split(" ")[0]} (why they are being notified)`}
+                              className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-[var(--brand-500)]"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 

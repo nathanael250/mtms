@@ -295,7 +295,7 @@ export async function sendBroadcastNotification({ employee, authorName, message 
 
 // Short heads-up to a staff member who is not assigned a task on a new job.
 // Throws if WhatsApp delivery fails. Returns "sent", "disabled" or "no_phone".
-export async function sendJobNotifyNotification({ recipient, job, authorName }) {
+export async function sendJobNotifyNotification({ recipient, job, authorName, message }) {
   if (!recipient.phone) {
     return "no_phone";
   }
@@ -311,11 +311,8 @@ export async function sendJobNotifyNotification({ recipient, job, authorName }) 
     `Job: ${job.title} (${job.job_code})`,
   ];
   if (dates) lines.push(`Period: ${dates}`);
-  const description = String(job.description || "").trim();
-  if (description) {
-    lines.push(`Details: ${description.length > 140 ? `${description.slice(0, 137)}...` : description}`);
-  }
-  lines.push("", "For your information. No task has been assigned to you.");
+  lines.push("", String(message || "").trim());
+  lines.push("", "No task has been assigned to you.");
 
   const result = await sendWhatsapp({ to: recipient.phone, text: lines.join("\n") });
   return result.skipped ? "disabled" : "sent";
