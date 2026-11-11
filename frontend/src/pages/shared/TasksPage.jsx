@@ -1585,16 +1585,30 @@ export default function TasksPage() {
                       </td>
                       {!isAdmin ? (
                         <td className="px-4 py-4">
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              goToTaskReport(task.id);
-                            }}
-                            className="whitespace-nowrap rounded-xl bg-[var(--brand-700)] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[var(--brand-600)]"
-                          >
-                            Report Task
-                          </button>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                goToTaskReport(task.id);
+                              }}
+                              className="whitespace-nowrap rounded-xl bg-[var(--brand-700)] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[var(--brand-600)]"
+                            >
+                              Report Task
+                            </button>
+                            {task.status !== "completed" && task.status !== "cancelled" ? (
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openCompletionModal(task);
+                                }}
+                                className="whitespace-nowrap rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                              >
+                                Mark as done
+                              </button>
+                            ) : null}
+                          </div>
                         </td>
                       ) : null}
                     </tr>
