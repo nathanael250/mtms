@@ -99,7 +99,15 @@ export default function App() {
         path="/mentions"
         element={
           <ProtectedRoute allowedRoles={["admin", "staff"]}>
-            <MentionsPage />
+            <MentionsPage key="overview" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-mentions"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "staff"]}>
+            <MentionsPage key="mine" mine />
           </ProtectedRoute>
         }
       />

@@ -29,10 +29,13 @@ const whatsappNotes = {
   not_needed: () => "",
 };
 
-export default function MentionsPage() {
+// `mine` shows the page of the signed-in person (also for admins); without it, an admin
+// gets the overview of everyone's mentions.
+export default function MentionsPage({ mine = false }) {
   const { token, user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const [tab, setTab] = useState(isAdmin ? "all" : "assigned");
+  const isOverview = isAdmin && !mine;
+  const [tab, setTab] = useState(isOverview ? "all" : "assigned");
   const [mentions, setMentions] = useState([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -130,11 +133,8 @@ export default function MentionsPage() {
   }
 
   const showingCreated = tab === "created";
-  const tabs = isAdmin
-    ? [
-        ["all", "All mentions"],
-        ["assigned", "Assigned to me"],
-      ]
+  const tabs = isOverview
+    ? []
     : [
         ["assigned", "Assigned to me"],
         ["created", "Tags I created"],
@@ -142,9 +142,9 @@ export default function MentionsPage() {
 
   return (
     <DashboardLayout
-      title={isAdmin ? "Mentions Overview" : "My Mentions"}
+      title={isOverview ? "Mentions Overview" : "My Mentions"}
       description={
-        isAdmin
+        isOverview
           ? "Monitor report tags, documents and replies."
           : "Tags assigned to you, and the tags you created with their replies."
       }
@@ -160,6 +160,7 @@ export default function MentionsPage() {
         </div>
       ) : null}
 
+      {tabs.length ? (
       <div className="mb-4 flex gap-2">
         {tabs.map(([key, label]) => (
           <button
@@ -179,6 +180,7 @@ export default function MentionsPage() {
           </button>
         ))}
       </div>
+      ) : null}
 
       <section className="app-panel rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="space-y-4">

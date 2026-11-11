@@ -33,6 +33,7 @@ const navigationByRole = {
     { to: "/tasks", label: "Tasks", icon: ClipboardList },
     { to: "/reports", label: "Reports Overview", icon: FileText },
     { to: "/mentions", label: "Mentions Overview", icon: MessageSquareMore },
+    { to: "/my-mentions", label: "My Mentions", icon: MessageSquareMore },
     { to: "/doc-library", label: "Doc Library", icon: FileText },
     { to: "/contacts", label: "Contacts", icon: ContactRound },
     { to: "/users", label: "Users", icon: UserCog },
@@ -101,11 +102,7 @@ export default function DashboardLayout({ title, description, children }) {
       }
 
       try {
-        const endpoint =
-          user.role === "admin"
-            ? "/report-mentions"
-            : "/report-mentions/assigned-to-me";
-        const data = await apiFetch(endpoint, { token });
+        const data = await apiFetch("/report-mentions/assigned-to-me", { token });
         setNotifications(data.mentions || []);
       } catch {
         setNotifications([]);
@@ -114,6 +111,9 @@ export default function DashboardLayout({ title, description, children }) {
 
     loadNotifications();
   }, [token, user?.role]);
+
+  // Admins have their own page for the mentions sent to them.
+  const myMentionsPath = user?.role === "admin" ? "/my-mentions" : "/mentions";
 
   const unreadNotifications = notifications.filter(
     (notification) => notification.status === "unread"
@@ -298,7 +298,7 @@ export default function DashboardLayout({ title, description, children }) {
                       </p>
                     </div>
                     <NavLink
-                      to="/mentions"
+                      to={myMentionsPath}
                       onClick={() => setIsNotificationMenuOpen(false)}
                       className="text-xs font-semibold text-[var(--brand-700)]"
                     >
@@ -315,7 +315,7 @@ export default function DashboardLayout({ title, description, children }) {
                       .map((notification) => (
                         <NavLink
                           key={notification.id}
-                          to="/mentions"
+                          to={myMentionsPath}
                           onClick={() => setIsNotificationMenuOpen(false)}
                           className="block rounded-[10px] px-3 py-3 transition hover:bg-slate-50"
                         >
@@ -399,7 +399,7 @@ export default function DashboardLayout({ title, description, children }) {
 
                   <div className="p-2">
                     <NavLink
-                      to="/mentions"
+                      to={myMentionsPath}
                       onClick={() => setIsAccountMenuOpen(false)}
                       className="flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
                     >
