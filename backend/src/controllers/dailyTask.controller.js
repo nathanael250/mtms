@@ -173,6 +173,18 @@ export const listDailyTasks = asyncHandler(async (req, res) => {
       [taskIds, req.user.id]
     );
     taskMentions = rows;
+
+    if (rows.length) {
+      const [files] = await getPool().query(
+        `SELECT id, mention_id, stage, file_name, file_path, file_type
+         FROM mention_files WHERE mention_id IN (?) ORDER BY id ASC`,
+        [rows.map((row) => row.id)]
+      );
+      taskMentions = rows.map((row) => ({
+        ...row,
+        files: files.filter((file) => file.mention_id === row.id),
+      }));
+    }
   }
 
   const tasksWithTodos = tasks.map((task) => ({

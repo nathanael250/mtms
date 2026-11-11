@@ -92,7 +92,8 @@ export default function TasksPage() {
   const [plannedTaskTime, setPlannedTaskTime] = useState("");
   const [plannedTodoText, setPlannedTodoText] = useState("");
   const [plannedTag, setPlannedTag] = useState({ on: false, userId: "", message: "" });
-  const [cardTag, setCardTag] = useState(null); // { taskId, userId, message }
+  const [plannedTagFiles, setPlannedTagFiles] = useState([]);
+  const [cardTag, setCardTag] = useState(null); // { taskId, userId, message, files }
   const [isTagging, setIsTagging] = useState(false);
   const [carryingId, setCarryingId] = useState(null);
   const [plannedDate, setPlannedDate] = useState(getDateInputValue());
@@ -419,8 +420,9 @@ export default function TasksPage() {
       setPlannedTodoText("");
 
       if (plannedTag.on) {
+        let tagged = null;
         try {
-          await apiFetch("/report-mentions/planned", {
+          tagged = await apiFetch("/report-mentions/planned", {
             method: "POST",
             token,
             body: {
@@ -433,7 +435,17 @@ export default function TasksPage() {
         } catch (tagError) {
           setError(`Planned task created, but the help request failed: ${tagError.message}`);
         }
+        if (tagged && plannedTagFiles.length) {
+          try {
+            await uploadMentionFiles(token, tagged.mention.id, plannedTagFiles);
+          } catch (uploadError) {
+            setError(
+              `Help request sent, but some documents failed to upload: ${uploadError.message}`
+            );
+          }
+        }
         setPlannedTag({ on: false, userId: "", message: "" });
+        setPlannedTagFiles([]);
       }
       await loadPlannedTasks(plannedDate);
     } catch (submitError) {
@@ -452,7 +464,7 @@ export default function TasksPage() {
     setSuccess("");
     setIsTagging(true);
     try {
-      await apiFetch("/report-mentions/planned", {
+      const tagged = await apiFetch("/report-mentions/planned", {
         method: "POST",
         token,
         body: {
@@ -461,8 +473,17 @@ export default function TasksPage() {
           message: cardTag.message.trim(),
         },
       });
+      const documents = cardTag.files || [];
       setCardTag(null);
       setSuccess("Help request sent.");
+      if (documents.length) {
+        try {
+          await uploadMentionFiles(token, tagged.mention.id, documents);
+        } catch (uploadError) {
+          setSuccess("");
+          setError(`Help request sent, but some documents failed to upload: ${uploadError.message}`);
+        }
+      }
       await loadPlannedTasks(plannedDate);
     } catch (tagError) {
       setError(tagError.message);
@@ -1036,6 +1057,11 @@ export default function TasksPage() {
                       placeholder="What do you need help with?"
                       className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
                     />
+                    <FilePicker
+                      files={plannedTagFiles}
+                      onChange={setPlannedTagFiles}
+                      label="Reference documents (optional)"
+                    />
                     <p className="text-xs text-slate-500">
                       They get a WhatsApp message and see it under Mentions, where they can resolve it.
                     </p>
@@ -1248,10 +1274,20 @@ export default function TasksPage() {
                                 <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
                                   {mention.message}
                                 </p>
+                                <AttachmentLinks
+                                  files={(mention.files || []).filter((file) => file.stage === "tag")}
+                                />
                                 {mention.status === "resolved" ? (
                                   <p className="mt-1 whitespace-pre-wrap text-sm text-emerald-800">
                                     Reply: {mention.resolution_message || "Marked as resolved."}
                                   </p>
+                                ) : null}
+                                {mention.status === "resolved" ? (
+                                  <AttachmentLinks
+                                    files={(mention.files || []).filter(
+                                      (file) => file.stage === "resolution"
+                                    )}
+                                  />
                                 ) : null}
                               </div>
                             ))}
@@ -1285,6 +1321,13 @@ export default function TasksPage() {
                                     maxLength={2000}
                                     placeholder="What do you need help with?"
                                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                                  />
+                                  <FilePicker
+                                    files={cardTag.files || []}
+                                    onChange={(files) =>
+                                      setCardTag((current) => ({ ...current, files }))
+                                    }
+                                    label="Reference documents (optional)"
                                   />
                                   <div className="flex gap-2">
                                     <button
