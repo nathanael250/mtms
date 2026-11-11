@@ -71,7 +71,10 @@ async function notifyStaffAboutJob(job, notifications, authorName) {
   if (!notifications.length) return summary;
 
   const [recipients] = await getPool().query(
-    `SELECT id, full_name, phone FROM users WHERE id IN (?) AND status = 'active'`,
+    `SELECT users.id, users.full_name, users.phone
+     FROM users JOIN roles ON roles.id = users.role_id
+     WHERE users.id IN (?) AND users.status = 'active'
+       AND roles.name = 'admin' AND users.can_receive_help = 1`,
     [notifications.map((item) => item.user_id)]
   );
   const messageFor = new Map(notifications.map((item) => [item.user_id, item.message]));

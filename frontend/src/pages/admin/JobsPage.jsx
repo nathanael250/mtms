@@ -24,6 +24,7 @@ export default function JobsPage() {
   const { token, user } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [staff, setStaff] = useState([]);
+  const [notifyAdmins, setNotifyAdmins] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [taskAssignments, setTaskAssignments] = useState([emptyTaskAssignment]);
   const [approvalFiles, setApprovalFiles] = useState([]);
@@ -51,10 +52,21 @@ export default function JobsPage() {
     }
   }
 
+  // Admins who opted in to receive help requests are the ones that can be notified.
+  async function loadNotifyAdmins() {
+    try {
+      const data = await apiFetch("/users/mentionable", { token });
+      setNotifyAdmins((data.users || []).filter((person) => person.role === "admin"));
+    } catch (loadError) {
+      setError(loadError.message);
+    }
+  }
+
   useEffect(() => {
     if (token) {
       loadJobs();
       loadStaff();
+      loadNotifyAdmins();
     }
   }, [token]);
 
@@ -81,8 +93,8 @@ export default function JobsPage() {
       if (notifyIds.length) {
         const missing = notifyIds.find((id) => !notifyMessages[id]?.trim());
         if (missing) {
-          const name = staff.find((member) => member.id === missing)?.full_name;
-          throw new Error(`Write the message for ${name || "each notified staff member"}.`);
+          const name = notifyAdmins.find((member) => member.id === missing)?.full_name;
+          throw new Error(`Write the message for ${name || "each notified admin"}.`);
         }
         formData.append(
           "notifications",
@@ -136,7 +148,7 @@ export default function JobsPage() {
       const notified = jobResponse.notified || {};
       const notifyCount = Object.keys(notifyMessages).length;
       const notifyNote = notifyCount
-        ? ` WhatsApp sent to ${notified.sent || 0} of ${notifyCount} notified staff${
+        ? ` WhatsApp sent to ${notified.sent || 0} of ${notifyCount} notified admins${
             notified.failed || notified.no_phone || notified.disabled
               ? " (some could not be reached)"
               : ""
@@ -538,13 +550,13 @@ export default function JobsPage() {
 
                 <div className="app-panel rounded-[24px] border border-slate-200 bg-white p-4">
                   <h3 className="text-base font-semibold text-slate-900">
-                    Notify other staff
+                    Notify admins
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Tick a person and write the message they will receive on WhatsApp. No task is assigned to them.
+                    Tick an admin and write the message they will receive on WhatsApp about this job.
                   </p>
                   <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
-                    {staff.map((member) => {
+                    {notifyAdmins.map((member) => {
                       const checked = member.id in notifyMessages;
                       return (
                         <div
@@ -583,6 +595,11 @@ export default function JobsPage() {
                         </div>
                       );
                     })}
+                    {!notifyAdmins.length && (
+                      <p className="text-sm text-slate-500">
+                        No admin is set to receive requests yet. Tick "Can be asked for help" on an admin in Users.
+                      </p>
+                    )}
                   </div>
                 </div>
                 </div>
