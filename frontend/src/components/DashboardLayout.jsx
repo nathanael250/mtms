@@ -33,7 +33,7 @@ const navigationByRole = {
     { to: "/tasks", label: "Tasks", icon: ClipboardList },
     { to: "/reports", label: "Reports Overview", icon: FileText },
     { to: "/mentions", label: "Mentions Overview", icon: MessageSquareMore },
-    { to: "/my-mentions", label: "My Mentions", icon: MessageSquareMore },
+    { to: "/my-mentions", label: "Help Requests", icon: MessageSquareMore },
     { to: "/doc-library", label: "Doc Library", icon: FileText },
     { to: "/contacts", label: "Contacts", icon: ContactRound },
     { to: "/users", label: "Users", icon: UserCog },
@@ -293,7 +293,8 @@ export default function DashboardLayout({ title, description, children }) {
                         Notifications
                       </p>
                       <p className="mt-0.5 text-xs text-slate-500">
-                        {unreadNotifications.length} unread mention
+                        {unreadNotifications.length} unread{" "}
+                        {user?.role === "admin" ? "help request" : "mention"}
                         {unreadNotifications.length === 1 ? "" : "s"}
                       </p>
                     </div>
@@ -404,7 +405,7 @@ export default function DashboardLayout({ title, description, children }) {
                       className="flex items-center gap-3 rounded-[10px] px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
                     >
                       <MessageSquareMore className="h-4 w-4 text-slate-400" />
-                      Mentions
+                      {user?.role === "admin" ? "Help requests" : "Mentions"}
                     </NavLink>
                     {user?.role === "admin" ? (
                       <NavLink

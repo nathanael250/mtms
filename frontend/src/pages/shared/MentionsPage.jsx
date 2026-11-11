@@ -133,22 +133,28 @@ export default function MentionsPage({ mine = false }) {
   }
 
   const showingCreated = tab === "created";
-  const tabs = isOverview
-    ? []
-    : [
-        ["assigned", "Assigned to me"],
-        ["created", "Tags I created"],
-      ];
+  // Admins only receive help requests (they do not create tags), so they get no tabs.
+  const isAdminInbox = isAdmin && mine;
+  const tabs =
+    isOverview || isAdminInbox
+      ? []
+      : [
+          ["assigned", "Assigned to me"],
+          ["created", "Tags I created"],
+        ];
+
+  let pageTitle = "My Mentions";
+  let pageDescription = "Tags assigned to you, and the tags you created with their replies.";
+  if (isOverview) {
+    pageTitle = "Mentions Overview";
+    pageDescription = "Monitor report tags, documents and replies.";
+  } else if (isAdminInbox) {
+    pageTitle = "Help Requests";
+    pageDescription = "Requests for help that staff sent to you. Resolve them with a reply.";
+  }
 
   return (
-    <DashboardLayout
-      title={isOverview ? "Mentions Overview" : "My Mentions"}
-      description={
-        isOverview
-          ? "Monitor report tags, documents and replies."
-          : "Tags assigned to you, and the tags you created with their replies."
-      }
-    >
+    <DashboardLayout title={pageTitle} description={pageDescription}>
       {error ? (
         <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
           {error}
