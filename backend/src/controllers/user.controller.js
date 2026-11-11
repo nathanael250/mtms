@@ -68,6 +68,20 @@ export const listStaff = asyncHandler(async (_req, res) => {
   res.json({ users: rows });
 });
 
+// People who can be asked for help on a planned task: every active staff member and admin.
+export const listMentionable = asyncHandler(async (_req, res) => {
+  const hidden = env.mentionHiddenEmails;
+  const [rows] = await getPool().query(
+    `SELECT users.id, users.full_name, roles.name AS role
+     FROM users JOIN roles ON roles.id = users.role_id
+     WHERE users.status = 'active'
+       ${hidden.length ? "AND LOWER(users.email) NOT IN (?)" : ""}
+     ORDER BY users.full_name ASC`,
+    hidden.length ? [hidden] : []
+  );
+  res.json({ users: rows });
+});
+
 export const getUserById = asyncHandler(async (req, res) => {
   const [rows] = await getPool().query(
     `${baseUserSelect} WHERE users.id = ? LIMIT 1`,

@@ -3,6 +3,7 @@ import {
   createUser,
   deleteUser,
   getUserById,
+  listMentionable,
   listStaff,
   listUsers,
   sendCredentials,
@@ -19,6 +20,7 @@ const router = Router();
 
 router.use(authenticate);
 router.get("/staff", listStaff);
+router.get("/mentionable", listMentionable);
 router.get("/", authorizeRoles("admin"), listUsers);
 router.post("/", authorizeRoles("admin"), createUserValidator, validateRequest, createUser);
 router.get("/:id", authorizeRoles("admin"), getUserById);

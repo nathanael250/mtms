@@ -24,6 +24,12 @@ export const env = {
   // Timezone that defines "today" for daily plans (the day changes at midnight here).
   appTimezone:
     process.env.APP_TIMEZONE || process.env.REMINDER_TIMEZONE || "Africa/Kigali",
+  // Accounts (by email, comma separated) that must not appear in the "Ask for help"
+  // list, such as a technical admin account used only to fix issues.
+  mentionHiddenEmails: (process.env.MENTION_HIDDEN_EMAILS || "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean),
   uploadsDir: process.env.UPLOADS_DIR || "uploads",
   googleConnectedEmail:
     process.env.GOOGLE_CONNECTED_EMAIL || "movepromotion1@gmail.com",

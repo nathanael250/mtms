@@ -85,6 +85,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [staff, setStaff] = useState([]);
+  const [mentionable, setMentionable] = useState([]);
   const [reports, setReports] = useState([]);
   const [plannedTasks, setPlannedTasks] = useState([]);
   const [plannedTaskTitle, setPlannedTaskTitle] = useState("");
@@ -225,6 +226,13 @@ export default function TasksPage() {
   useEffect(() => {
     loadPageData(false);
   }, [isAdmin, token, user?.id]);
+
+  // Everyone who can be asked for help on a planned task (staff and admins).
+  useEffect(() => {
+    apiFetch("/users/mentionable", { token })
+      .then((data) => setMentionable(data.users || []))
+      .catch(() => setMentionable([]));
+  }, [token]);
 
   useEffect(() => {
     if (activeTab === "planned") {
@@ -1008,12 +1016,13 @@ export default function TasksPage() {
                       }
                       className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
                     >
-                      <option value="">Select staff</option>
-                      {staff
+                      <option value="">Select staff or admin</option>
+                      {mentionable
                         .filter((member) => member.id !== user.id)
                         .map((member) => (
                           <option key={member.id} value={member.id}>
                             {member.full_name}
+                            {member.role === "admin" ? " (Admin)" : ""}
                           </option>
                         ))}
                     </select>
@@ -1257,12 +1266,13 @@ export default function TasksPage() {
                                     }
                                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
                                   >
-                                    <option value="">Select staff</option>
-                                    {staff
+                                    <option value="">Select staff or admin</option>
+                                    {mentionable
                                       .filter((member) => member.id !== user.id)
                                       .map((member) => (
                                         <option key={member.id} value={member.id}>
                                           {member.full_name}
+                                          {member.role === "admin" ? " (Admin)" : ""}
                                         </option>
                                       ))}
                                   </select>

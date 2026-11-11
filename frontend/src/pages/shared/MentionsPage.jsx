@@ -32,7 +32,7 @@ const whatsappNotes = {
 export default function MentionsPage() {
   const { token, user } = useAuth();
   const isAdmin = user?.role === "admin";
-  const [tab, setTab] = useState("assigned");
+  const [tab, setTab] = useState(isAdmin ? "all" : "assigned");
   const [mentions, setMentions] = useState([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -46,11 +46,10 @@ export default function MentionsPage() {
   async function loadMentions() {
     try {
       let endpoint = "/report-mentions";
-      if (!isAdmin) {
-        endpoint =
-          tab === "assigned"
-            ? "/report-mentions/assigned-to-me"
-            : "/report-mentions/my-created";
+      if (tab === "assigned") {
+        endpoint = "/report-mentions/assigned-to-me";
+      } else if (tab === "created") {
+        endpoint = "/report-mentions/my-created";
       }
       const data = await apiFetch(endpoint, { token });
       setMentions(data.mentions || []);
@@ -130,7 +129,16 @@ export default function MentionsPage() {
     }
   }
 
-  const showingCreated = !isAdmin && tab === "created";
+  const showingCreated = tab === "created";
+  const tabs = isAdmin
+    ? [
+        ["all", "All mentions"],
+        ["assigned", "Assigned to me"],
+      ]
+    : [
+        ["assigned", "Assigned to me"],
+        ["created", "Tags I created"],
+      ];
 
   return (
     <DashboardLayout
@@ -152,30 +160,25 @@ export default function MentionsPage() {
         </div>
       ) : null}
 
-      {!isAdmin ? (
-        <div className="mb-4 flex gap-2">
-          {[
-            ["assigned", "Assigned to me"],
-            ["created", "Tags I created"],
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => {
-                setTab(key);
-                setSuccess("");
-              }}
-              className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
-                tab === key
-                  ? "bg-[var(--brand-700)] text-white"
-                  : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      <div className="mb-4 flex gap-2">
+        {tabs.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => {
+              setTab(key);
+              setSuccess("");
+            }}
+            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+              tab === key
+                ? "bg-[var(--brand-700)] text-white"
+                : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
       <section className="app-panel rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="space-y-4">
@@ -229,7 +232,7 @@ export default function MentionsPage() {
                     >
                       {mention.status}
                     </span>
-                    {!isAdmin && !showingCreated && mention.status === "unread" ? (
+                    {!showingCreated && mention.mentioned_user_id === user?.id && mention.status === "unread" ? (
                       <button
                         type="button"
                         onClick={() => markRead(mention.id)}
@@ -238,7 +241,7 @@ export default function MentionsPage() {
                         Mark Read
                       </button>
                     ) : null}
-                    {!isAdmin && !showingCreated && !isResolved ? (
+                    {!showingCreated && mention.mentioned_user_id === user?.id && !isResolved ? (
                       <button
                         type="button"
                         onClick={() => openResolve(mention)}
