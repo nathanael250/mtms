@@ -535,7 +535,6 @@ export default function JobsPage() {
                       </ul>
                     )}
                   </div>
-                </div>
 
                 <div className="app-panel rounded-[24px] border border-slate-200 bg-white p-4">
                   <h3 className="text-base font-semibold text-slate-900">
@@ -585,6 +584,7 @@ export default function JobsPage() {
                       );
                     })}
                   </div>
+                </div>
                 </div>
 
                 <div className="app-panel rounded-[24px] border border-[var(--brand-100)] bg-[var(--brand-50)] p-4">
