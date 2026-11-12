@@ -4,6 +4,7 @@ import { getPool } from "../config/database.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 import { getTodayYmd } from "../utils/today.js";
+import { sendCommentReplyNotification } from "../services/notification.service.js";
 
 function getRequestedDate(value) {
   if (!value) {
@@ -198,7 +199,7 @@ export const listDailyTasks = asyncHandler(async (req, res) => {
   const [comments] = await getPool().query(
     `SELECT daily_task_comments.id, daily_task_comments.daily_task_id,
             daily_task_comments.message, daily_task_comments.created_at,
-            users.full_name AS author_name
+            daily_task_comments.author_id, users.full_name AS author_name
      FROM daily_task_comments
      JOIN users ON users.id = daily_task_comments.author_id
      WHERE daily_task_comments.employee_id = ? AND daily_task_comments.plan_date = ?
@@ -652,3 +653,92 @@ export async function materializeCarryOvers({ userId = null } = {}) {
     }
   }
 }
+
+// A staff member replies to what an admin wrote on their plan. The reply is stored in
+// the same thread (a comment on the same task, or on the same day) and the person who
+// wrote the latest comment there is told on WhatsApp. Body: { daily_task_id | date, message }.
+// Replying is allowed on any day; the day lock only applies to editing the plan.
+export const replyToComment = asyncHandler(async (req, res) => {
+  const pool = getPool();
+  const message = String(req.body.message || "").trim();
+  if (!message) {
+    throw new ApiError(400, "Reply cannot be empty.");
+  }
+  if (message.length > 1000) {
+    throw new ApiError(400, "Reply is too long (maximum 1000 characters).");
+  }
+
+  let taskId = null;
+  let taskDescription = null;
+  let planDate;
+
+  if (req.body.daily_task_id) {
+    const [tasks] = await pool.query(
+      `SELECT id, description, DATE_FORMAT(created_date, '%Y-%m-%d') AS created_date
+       FROM daily_tasks WHERE id = ? AND user_id = ? AND parent_task_id IS NULL`,
+      [req.body.daily_task_id, req.user.id]
+    );
+    if (!tasks.length) {
+      throw new ApiError(404, "Planned task not found.");
+    }
+    taskId = tasks[0].id;
+    taskDescription = tasks[0].description;
+    planDate = tasks[0].created_date;
+  } else {
+    planDate = getRequestedDate(req.body.date) || getTodayYmd();
+  }
+
+  // Who are we answering? The latest comment by someone else in this same thread.
+  const [previous] = await pool.query(
+    `SELECT author_id FROM daily_task_comments
+     WHERE employee_id = ? AND author_id <> ? AND plan_date = ?
+       AND ${taskId ? "daily_task_id = ?" : "daily_task_id IS NULL"}
+     ORDER BY id DESC LIMIT 1`,
+    taskId ? [req.user.id, req.user.id, planDate, taskId] : [req.user.id, req.user.id, planDate]
+  );
+  if (!previous.length) {
+    throw new ApiError(400, "There is no comment to reply to here.");
+  }
+
+  const [result] = await pool.query(
+    `INSERT INTO daily_task_comments (employee_id, daily_task_id, plan_date, author_id, message)
+     VALUES (?, ?, ?, ?, ?)`,
+    [req.user.id, taskId, planDate, req.user.id, message]
+  );
+
+  let whatsappStatus;
+  try {
+    const [recipients] = await pool.query(
+      "SELECT id, full_name, phone FROM users WHERE id = ? AND status = 'active' LIMIT 1",
+      [previous[0].author_id]
+    );
+    whatsappStatus = recipients.length
+      ? await sendCommentReplyNotification({
+          recipient: recipients[0],
+          replierName: req.user.full_name,
+          planDate,
+          taskDescription,
+          message,
+        })
+      : "no_phone";
+  } catch (error) {
+    console.error(`Comment reply WhatsApp failed for comment ${result.insertId}:`, error.message);
+    whatsappStatus = "failed";
+  }
+  await pool.query("UPDATE daily_task_comments SET whatsapp_status = ? WHERE id = ?", [
+    whatsappStatus,
+    result.insertId,
+  ]);
+
+  res.status(201).json({
+    message: "Reply sent.",
+    comment: {
+      id: result.insertId,
+      daily_task_id: taskId,
+      message,
+      author_id: req.user.id,
+      author_name: req.user.full_name,
+      created_at: new Date().toISOString(),
+    },
+  });
+});

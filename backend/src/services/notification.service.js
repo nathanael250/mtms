@@ -316,3 +316,33 @@ export async function sendJobNotifyNotification({ recipient, job, authorName, me
   const result = await sendWhatsapp({ to: recipient.phone, text: lines.join("\n") });
   return result.skipped ? "disabled" : "sent";
 }
+
+// A staff member answered a comment. Sent to the person who wrote that comment.
+// Throws if WhatsApp delivery fails. Returns "sent", "disabled" or "no_phone".
+export async function sendCommentReplyNotification({
+  recipient,
+  replierName,
+  planDate,
+  taskDescription,
+  message,
+}) {
+  if (!recipient.phone) {
+    return "no_phone";
+  }
+  const name = String(recipient.full_name || "").trim().split(/\s+/)[0] || "there";
+  const about = taskDescription
+    ? `your comment on the planned task "${taskDescription}" (${planDate})`
+    : `your comment on their plan for ${planDate}`;
+  const text = [
+    `Hello ${name},`,
+    "",
+    `${replierName} replied to ${about}:`,
+    "",
+    message,
+    "",
+    "Open Daily Activities Log in MOPAS to see it.",
+  ].join("\n");
+
+  const result = await sendWhatsapp({ to: recipient.phone, text });
+  return result.skipped ? "disabled" : "sent";
+}

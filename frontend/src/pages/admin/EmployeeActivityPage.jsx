@@ -95,17 +95,26 @@ const whatsappLabels = {
   failed: { text: "Saved. WhatsApp delivery failed", className: "text-red-600" },
 };
 
-function CommentList({ comments, onDelete }) {
+function CommentList({ comments, onDelete, employeeId }) {
   if (!comments.length) return null;
   return (
     <div className="mt-3 space-y-2">
       {comments.map((comment) => {
-        const status = whatsappLabels[comment.whatsapp_status];
+        const isReply = Number(comment.author_id) === Number(employeeId);
+        const status = isReply ? null : whatsappLabels[comment.whatsapp_status];
         return (
-          <div key={comment.id} className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2">
+          <div
+            key={comment.id}
+            className={`rounded-xl border px-3 py-2 ${
+              isReply
+                ? "ml-6 border-emerald-100 bg-emerald-50"
+                : "border-blue-100 bg-blue-50"
+            }`}
+          >
             <div className="flex items-start justify-between gap-2">
               <p className="text-xs font-semibold text-blue-800">
                 {comment.author_name}
+                {isReply ? " (reply)" : ""}
                 <span className="ml-2 font-normal text-blue-600">{formatDateTime(comment.created_at)}</span>
               </p>
               <button
@@ -618,7 +627,7 @@ export default function EmployeeActivityPage() {
                           </div>
                         ) : null}
 
-                        <CommentList comments={task.comments} onDelete={deleteComment} />
+                        <CommentList comments={task.comments} onDelete={deleteComment} employeeId={userId} />
                         <CommentBox
                           placeholder="Write a comment about this task..."
                           onSend={(message) => sendComment({ daily_task_id: task.id, message })}
@@ -655,7 +664,7 @@ export default function EmployeeActivityPage() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                   Comments on this day
                 </p>
-                <CommentList comments={day.day_comments} onDelete={deleteComment} />
+                <CommentList comments={day.day_comments} onDelete={deleteComment} employeeId={userId} />
                 <CommentBox
                   placeholder="Write a comment about this day..."
                   onSend={(message) => sendComment({ date: day.date, message })}

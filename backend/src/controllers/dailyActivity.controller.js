@@ -198,7 +198,8 @@ export const getEmployeeActivity = asyncHandler(async (req, res) => {
     `SELECT daily_task_comments.id, daily_task_comments.daily_task_id,
             DATE_FORMAT(daily_task_comments.plan_date, '%Y-%m-%d') AS plan_date,
             daily_task_comments.message, daily_task_comments.whatsapp_status,
-            daily_task_comments.created_at, users.full_name AS author_name
+            daily_task_comments.created_at, daily_task_comments.author_id,
+            users.full_name AS author_name
      FROM daily_task_comments
      JOIN users ON users.id = daily_task_comments.author_id
      WHERE daily_task_comments.employee_id = ?
@@ -379,7 +380,8 @@ export const addEmployeeComment = asyncHandler(async (req, res) => {
     `SELECT daily_task_comments.id, daily_task_comments.daily_task_id,
             DATE_FORMAT(daily_task_comments.plan_date, '%Y-%m-%d') AS plan_date,
             daily_task_comments.message, daily_task_comments.whatsapp_status,
-            daily_task_comments.created_at, users.full_name AS author_name
+            daily_task_comments.created_at, daily_task_comments.author_id,
+            users.full_name AS author_name
      FROM daily_task_comments
      JOIN users ON users.id = daily_task_comments.author_id
      WHERE daily_task_comments.id = ?`,
