@@ -223,7 +223,7 @@ export async function sendPlanCommentNotification({
     "",
     message,
     "",
-    "Please sign in to MOPAS, open My Tasks > Planned tasks, pick that date and update your plan if needed.",
+    "Please sign in to MOPAS and open \"Admin Comments\" to read it and reply.",
   ].join("\n");
 
   const result = await sendWhatsapp({ to: employee.phone, text });

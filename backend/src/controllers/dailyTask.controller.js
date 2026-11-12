@@ -742,3 +742,54 @@ export const replyToComment = asyncHandler(async (req, res) => {
     },
   });
 });
+
+// Every conversation on the signed-in person's plans that someone else started, newest
+// first. A conversation is the comments on one planned task, or the comments on one day.
+// `needs_reply` is true while the latest message in it came from somebody else.
+export const listMyCommentThreads = asyncHandler(async (req, res) => {
+  const [rows] = await getPool().query(
+    `SELECT c.id, c.daily_task_id, DATE_FORMAT(c.plan_date, '%Y-%m-%d') AS plan_date,
+            c.message, c.created_at, c.author_id, author.full_name AS author_name,
+            t.description AS task_description
+     FROM daily_task_comments AS c
+     JOIN users AS author ON author.id = c.author_id
+     LEFT JOIN daily_tasks AS t ON t.id = c.daily_task_id
+     WHERE c.employee_id = ?
+     ORDER BY c.id ASC`,
+    [req.user.id]
+  );
+
+  const threads = new Map();
+  for (const row of rows) {
+    const key = row.daily_task_id ? `task-${row.daily_task_id}` : `day-${row.plan_date}`;
+    if (!threads.has(key)) {
+      threads.set(key, {
+        key,
+        daily_task_id: row.daily_task_id,
+        plan_date: row.plan_date,
+        task_description: row.task_description,
+        messages: [],
+      });
+    }
+    threads.get(key).messages.push({
+      id: row.id,
+      message: row.message,
+      created_at: row.created_at,
+      author_id: row.author_id,
+      author_name: row.author_name,
+    });
+  }
+
+  const list = [...threads.values()]
+    .filter((thread) => thread.messages.some((m) => m.author_id !== req.user.id))
+    .map((thread) => {
+      const last = thread.messages[thread.messages.length - 1];
+      return { ...thread, last_at: last.created_at, needs_reply: last.author_id !== req.user.id };
+    })
+    .sort((x, y) => new Date(y.last_at) - new Date(x.last_at));
+
+  res.json({
+    threads: list,
+    needs_reply_count: list.filter((thread) => thread.needs_reply).length,
+  });
+});

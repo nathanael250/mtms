@@ -9,6 +9,7 @@ import {
   updateDailyTask,
   reorderDailyTasks,
   replyToComment,
+  listMyCommentThreads,
   setCarryOver,
   saveDayReport,
   uploadDayReportFile,
@@ -50,6 +51,7 @@ router.delete(
 router.put("/day-report", saveDayReport);
 router.put("/reorder", reorderDailyTasks);
 router.post("/comments/reply", replyToComment);
+router.get("/my-comments", listMyCommentThreads);
 router.patch("/:id/carry-over", setCarryOver);
 router.post("/day-report/files", uploadSingleAttachment, uploadDayReportFile);
 router.delete("/day-report/files/:id", deleteDayReportFile);

@@ -46,6 +46,7 @@ const navigationByRole = {
     { to: "/tasks", label: "My Tasks", icon: ListTodo },
     { to: "/reports", label: "My Reports", icon: FileText },
     { to: "/mentions", label: "My Mentions", icon: MessageSquareMore },
+    { to: "/admin-comments", label: "Admin Comments", icon: MessageSquareMore, badge: "comments" },
     { to: "/doc-library", label: "Doc Library", icon: FileText },
     { to: "/contacts", label: "Contacts", icon: ContactRound },
   ],
@@ -112,6 +113,15 @@ export default function DashboardLayout({ title, description, children }) {
     loadNotifications();
   }, [token, user?.role]);
 
+  // Staff: how many admin comments are still waiting for their reply (shown on the sidebar).
+  const [commentsToReply, setCommentsToReply] = useState(0);
+  useEffect(() => {
+    if (!token || user?.role !== "staff") return;
+    apiFetch("/daily-tasks/my-comments", { token })
+      .then((data) => setCommentsToReply(data.needs_reply_count || 0))
+      .catch(() => setCommentsToReply(0));
+  }, [token, user?.role]);
+
   // Admins have their own page for the mentions sent to them.
   const myMentionsPath = user?.role === "admin" ? "/my-mentions" : "/mentions";
 
@@ -164,6 +174,11 @@ export default function DashboardLayout({ title, description, children }) {
               >
                 <Icon className="h-[15px] w-[15px] shrink-0" />
                 {!collapsed ? <span>{item.label}</span> : null}
+                {item.badge === "comments" && commentsToReply > 0 ? (
+                  <span className="ml-auto rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                    {commentsToReply}
+                  </span>
+                ) : null}
               </NavLink>
             );
           })}

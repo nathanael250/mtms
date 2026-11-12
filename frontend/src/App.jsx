@@ -9,6 +9,7 @@ import WorkflowPage from "./pages/shared/WorkflowPage";
 import TasksPage from "./pages/shared/TasksPage";
 import ReportsPage from "./pages/shared/ReportsPage";
 import MentionsPage from "./pages/shared/MentionsPage";
+import CommentsPage from "./pages/shared/CommentsPage";
 import DocLibraryPage from "./pages/shared/DocLibraryPage";
 import ContactsPage from "./pages/shared/ContactsPage";
 import ActivityLogsPage from "./pages/admin/ActivityLogsPage";
@@ -68,6 +69,14 @@ export default function App() {
         element={
           <ProtectedRoute allowedRoles={["admin", "staff"]}>
             <TasksPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin-comments"
+        element={
+          <ProtectedRoute allowedRoles={["staff"]}>
+            <CommentsPage />
           </ProtectedRoute>
         }
       />
