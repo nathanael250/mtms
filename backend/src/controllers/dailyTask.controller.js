@@ -481,7 +481,10 @@ export const deleteDayReportFile = asyncHandler(async (req, res) => {
   await assertDayEditable(req.user.id, rows[0].report_day);
 
   await getPool().query("DELETE FROM daily_day_report_files WHERE id = ?", [rows[0].id]);
-  await fs.unlink(path.resolve(process.cwd(), rows[0].file_path)).catch(() => {});
+  // Links to Google Drive have no file on this server.
+  if (!/^https?:\/\//i.test(rows[0].file_path)) {
+    await fs.unlink(path.resolve(process.cwd(), rows[0].file_path)).catch(() => {});
+  }
 
   res.json({ message: "File removed." });
 });

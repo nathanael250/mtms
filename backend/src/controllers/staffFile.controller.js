@@ -4,6 +4,7 @@ import {
   deleteDriveFile,
   uploadStaffFileToDrive,
 } from "../services/googleDrive.service.js";
+import { assertDayEditable } from "./dailyTask.controller.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
 
@@ -18,8 +19,15 @@ async function getDriveSettings() {
 
 // Staff may attach to their own report or to a task assigned to them; admins to anything.
 async function assertCanAttach(user, relatedType, relatedId) {
+  if (relatedType === "day") {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(relatedId))) {
+      throw new ApiError(400, "Date must use YYYY-MM-DD format.");
+    }
+    await assertDayEditable(user.id, relatedId);
+    return;
+  }
   if (!["task", "report"].includes(relatedType)) {
-    throw new ApiError(400, "Files can be attached to a task or a report.");
+    throw new ApiError(400, "Files can be attached to a task, a report or a day report.");
   }
   const table = relatedType === "task" ? "tasks" : "task_daily_reports";
   const ownerColumn = relatedType === "task" ? "assigned_to" : "user_id";
@@ -33,6 +41,34 @@ async function assertCanAttach(user, relatedType, relatedId) {
   if (user.role !== "admin" && rows[0].owner_id !== user.id) {
     throw new ApiError(403, "You can only attach files to your own work.");
   }
+}
+
+// Only Google Drive links may be pasted as a reference file.
+export function assertDriveLink(value) {
+  const url = String(value || "").trim();
+  let host = "";
+  try {
+    const parsed = new URL(url);
+    host = parsed.protocol === "https:" ? parsed.hostname : "";
+  } catch {
+    host = "";
+  }
+  if (!["drive.google.com", "docs.google.com"].includes(host)) {
+    throw new ApiError(400, "Paste a Google Drive link (it starts with https://drive.google.com).");
+  }
+  if (url.length > 255) {
+    throw new ApiError(400, "This link is too long.");
+  }
+  return url;
+}
+
+// The day report keeps its files in their own table; attach_id is the report date.
+async function addDayFile({ date, name, url, mimeType, userId }) {
+  await getPool().query(
+    `INSERT INTO daily_day_report_files (user_id, report_date, file_name, file_path, file_type)
+     VALUES (?, ?, ?, ?, ?)`,
+    [userId, date, name.slice(0, 255), url, mimeType || "link/drive"]
+  );
 }
 
 async function addAttachment({ relatedType, relatedId, name, url, mimeType, userId }) {
@@ -81,7 +117,15 @@ export const uploadStaffFile = asyncHandler(async (req, res) => {
       ]
     );
 
-    if (attach_type) {
+    if (attach_type === "day") {
+      await addDayFile({
+        date: attach_id,
+        name: `${ATTACH_LABELS[label] || ATTACH_LABELS.final_product}: ${req.file.originalname}`,
+        url: drive.fileUrl,
+        mimeType: req.file.mimetype,
+        userId: req.user.id,
+      });
+    } else if (attach_type) {
       const prefix = ATTACH_LABELS[label] || ATTACH_LABELS.final_product;
       await addAttachment({
         relatedType: attach_type,
@@ -115,21 +159,20 @@ export const attachReferenceLink = asyncHandler(async (req, res) => {
   const url = String(req.body.url || "").trim();
   const note = String(req.body.name || "").trim();
 
-  let host = "";
-  try {
-    const parsed = new URL(url);
-    host = parsed.protocol === "https:" ? parsed.hostname : "";
-  } catch {
-    host = "";
-  }
-  if (!["drive.google.com", "docs.google.com"].includes(host)) {
-    throw new ApiError(400, "Paste a Google Drive link (it starts with https://drive.google.com).");
-  }
-  if (url.length > 255) {
-    throw new ApiError(400, "This link is too long.");
-  }
+  assertDriveLink(url);
 
   await assertCanAttach(req.user, related_type, related_id);
+  if (related_type === "day") {
+    await addDayFile({
+      date: related_id,
+      name: note ? `Reference file: ${note}` : "Reference file",
+      url,
+      mimeType: "link/drive",
+      userId: req.user.id,
+    });
+    res.status(201).json({ message: "Reference file added." });
+    return;
+  }
   const id = await addAttachment({
     relatedType: related_type,
     relatedId: related_id,

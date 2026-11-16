@@ -23,6 +23,7 @@ import ReplyBox from "../../components/CommentReplyBox";
 import { apiFetch } from "../../lib/api";
 import {
   ACCEPTED_FILE_TYPES,
+  STAFF_FILE_ACCEPT,
   getUploadUrl,
   uploadMentionFiles,
   submitFinalProduct,
@@ -143,6 +144,8 @@ export default function TasksPage() {
   const [dayComments, setDayComments] = useState([]);
   const [reportFiles, setReportFiles] = useState([]);
   const [finalFiles, setFinalFiles] = useState([]);
+  const [dayLink, setDayLink] = useState("");
+  const [isAddingDayItem, setIsAddingDayItem] = useState(false);
   const [referenceLink, setReferenceLink] = useState("");
   const [mentionFiles, setMentionFiles] = useState([]);
   const [dayFiles, setDayFiles] = useState([]);
@@ -770,6 +773,45 @@ export default function TasksPage() {
     } finally {
       setIsUploadingDayFile(false);
     }
+  }
+
+  // Final product: goes to the staff member's Google Drive folder and onto the day report.
+  async function handleDayFinalProduct(event) {
+    const picked = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!picked.length) return;
+    setError("");
+    setSuccess("");
+    setIsAddingDayItem(true);
+    const problems = await submitFinalProduct(
+      token,
+      { type: "day", id: plannedDate },
+      picked,
+      ""
+    );
+    if (problems.length) setError(problems.join("; "));
+    await refreshDayFiles().catch(() => {});
+    setIsAddingDayItem(false);
+  }
+
+  async function handleAddDayLink() {
+    if (!dayLink.trim()) return;
+    setError("");
+    setSuccess("");
+    setIsAddingDayItem(true);
+    const problems = await submitFinalProduct(
+      token,
+      { type: "day", id: plannedDate },
+      [],
+      dayLink
+    );
+    if (problems.length) {
+      setError(problems.join("; "));
+    } else {
+      setDayLink("");
+    }
+    await refreshDayFiles().catch(() => {});
+    setIsAddingDayItem(false);
   }
 
   async function handleDeleteDayFile(fileId) {
@@ -1565,6 +1607,44 @@ export default function TasksPage() {
                     <span className="ml-3 text-xs text-slate-500">
                       Files are saved as soon as you pick them.
                     </span>
+                    <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3">
+                      <p className="text-xs font-semibold text-slate-700">
+                        Final product (video, audio or documents)
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Upload it to your Google Drive folder, or paste the link you copied from
+                        Doc Library &gt; My Folder.
+                      </p>
+                      <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">
+                        <Paperclip className="h-3.5 w-3.5" />
+                        {isAddingDayItem ? "Please wait..." : "Upload final product"}
+                        <input
+                          type="file"
+                          multiple
+                          accept={STAFF_FILE_ACCEPT}
+                          onChange={handleDayFinalProduct}
+                          disabled={isAddingDayItem}
+                          className="sr-only"
+                        />
+                      </label>
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          type="url"
+                          value={dayLink}
+                          onChange={(event) => setDayLink(event.target.value)}
+                          placeholder="Paste a Google Drive link (Reference file)"
+                          className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs outline-none focus:border-[var(--brand-400)]"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAddDayLink}
+                          disabled={isAddingDayItem || !dayLink.trim()}
+                          className="rounded-xl bg-[var(--brand-700)] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                        >
+                          Add link
+                        </button>
+                      </div>
+                    </div>
                     {dayFiles.length ? (
                       <div className="mt-2 space-y-1.5">
                         {dayFiles.map((file) => (
