@@ -13,6 +13,7 @@ import { useParams } from "react-router-dom";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
 import { API_BASE_URL, apiFetch } from "../../lib/api";
+import StaffFolderPanel from "../../components/StaffFolderPanel";
 
 const initialUploadForm = {
   job_id: "",
@@ -121,7 +122,7 @@ function StatusBadge({ status }) {
   );
 }
 
-export default function DocLibraryPage() {
+function DocumentsView({ modeTabs }) {
   const { token, user } = useAuth();
   const { view } = useParams();
   const isAdmin = user?.role === "admin";
@@ -280,6 +281,8 @@ export default function DocLibraryPage() {
           {success}
         </div>
       ) : null}
+
+      {modeTabs}
 
       <section className="app-panel rounded-[8px] border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -640,4 +643,53 @@ export default function DocLibraryPage() {
       ) : null}
     </DashboardLayout>
   );
+}
+
+// The library has two parts: the shared documents, and the dedicated Google Drive folder of
+// each staff member (staff see only their own; admins can open anyone's).
+export default function DocLibraryPage() {
+  const { user } = useAuth();
+  const { view } = useParams();
+  const isAdmin = user?.role === "admin";
+  const [mode, setMode] = useState(view === "folder" ? "folder" : "documents");
+
+  const modeTabs = (
+    <div className="mb-5 flex flex-wrap gap-2">
+      {[
+        ["documents", "Library Documents"],
+        ["folder", isAdmin ? "Staff Folders" : "My Folder"],
+      ].map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => setMode(key)}
+          className={`rounded-[8px] px-4 py-2 text-sm font-bold ${
+            mode === key
+              ? "bg-[var(--brand-700)] text-white"
+              : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (mode === "folder") {
+    return (
+      <DashboardLayout
+        title="Doc Library"
+        description={
+          isAdmin
+            ? "Open a staff member's Google Drive folder to see their files."
+            : "Your own folder in Google Drive. Upload videos, audio and documents and copy their links."
+        }
+      >
+        {modeTabs}
+        <StaffFolderPanel />
+      </DashboardLayout>
+    );
+  }
+
+  return <DocumentsView modeTabs={modeTabs} />;
 }

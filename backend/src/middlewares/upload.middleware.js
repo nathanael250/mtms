@@ -68,3 +68,38 @@ export const uploadJobDocuments = multer({
   { name: "files", maxCount: 20 },
   { name: "file", maxCount: 1 },
 ]);
+
+// Staff folder uploads go to Google Drive: videos and audio are allowed and the limit is higher.
+const staffFileExtensions = new Set([
+  ...allowedExtensions,
+  ".mov", ".avi", ".mkv", ".webm", ".m4v",
+  ".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac",
+  ".ppt", ".pptx", ".xls", ".txt", ".csv", ".zip", ".gif", ".webp",
+]);
+
+const staffFileStorage = multer.diskStorage({
+  destination: (_req, _file, callback) => {
+    const target = path.resolve(process.cwd(), env.uploadsDir, "staff-files");
+    ensureDirectory(target);
+    callback(null, target);
+  },
+  filename: (_req, file, callback) => {
+    const extension = path.extname(file.originalname);
+    callback(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${extension}`);
+  },
+});
+
+export const STAFF_FILE_MAX_MB = 500;
+
+export const uploadStaffFile = multer({
+  storage: staffFileStorage,
+  fileFilter: (_req, file, callback) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+    if (!staffFileExtensions.has(extension)) {
+      callback(new ApiError(400, "Unsupported file type."));
+      return;
+    }
+    callback(null, true);
+  },
+  limits: { fileSize: STAFF_FILE_MAX_MB * 1024 * 1024 },
+}).single("file");

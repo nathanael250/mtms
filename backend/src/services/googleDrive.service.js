@@ -185,3 +185,51 @@ export function buildLocalDocumentMetadata({ file, settings, folderId }) {
     folderId,
   };
 }
+
+// Each staff member has a folder of their own: <root>/Staff Files/<full name>.
+// Files are readable by anyone who has the link, so the link can be pasted into reports
+// and opened by an admin straight from Google Drive.
+export async function uploadStaffFileToDrive({ file, settings, user }) {
+  const drive = getDrive(settings);
+  const rootId = settings.root_folder_id || settings.approved_folder_id;
+  if (!rootId) {
+    throw new ApiError(400, "Google Drive root folder is not configured.");
+  }
+
+  const staffFilesId = await findOrCreateFolder(drive, "Staff Files", rootId);
+  const folderId = await findOrCreateFolder(
+    drive,
+    `${sanitizeDriveName(user.full_name)} (${user.id})`,
+    staffFilesId
+  );
+
+  const uploaded = await drive.files.create({
+    requestBody: { name: sanitizeDriveName(file.originalname), parents: [folderId] },
+    media: { mimeType: file.mimetype, body: fs.createReadStream(file.path) },
+    fields: "id, webViewLink",
+  });
+
+  try {
+    await drive.permissions.create({
+      fileId: uploaded.data.id,
+      requestBody: { role: "reader", type: "anyone" },
+    });
+  } catch (error) {
+    // The file is still saved; the link then only opens for people with Drive access.
+    console.error(`Could not make Drive file ${uploaded.data.id} link-shareable:`, error.message);
+  }
+
+  return {
+    fileId: uploaded.data.id,
+    fileUrl: uploaded.data.webViewLink,
+    folderId,
+  };
+}
+
+export async function deleteDriveFile({ settings, fileId }) {
+  try {
+    await getDrive(settings).files.delete({ fileId });
+  } catch (error) {
+    console.error(`Could not delete Drive file ${fileId}:`, error.message);
+  }
+}

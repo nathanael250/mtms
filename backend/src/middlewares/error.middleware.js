@@ -5,6 +5,10 @@ export function notFoundHandler(req, _res, next) {
 }
 
 export function errorHandler(error, _req, res, _next) {
+  if (error.code === "LIMIT_FILE_SIZE") {
+    res.status(413).json({ message: "This file is too large." });
+    return;
+  }
   const statusCode = error.statusCode || 500;
 
   res.status(statusCode).json({

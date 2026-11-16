@@ -3,7 +3,7 @@ import path from "path";
 import { getPool } from "../config/database.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/apiError.js";
-import { getTodayYmd } from "../utils/today.js";
+import { getTodayYmd, isWeekendYmd, nextWorkingDayYmd } from "../utils/today.js";
 import { sendCommentReplyNotification } from "../services/notification.service.js";
 
 function getRequestedDate(value) {
@@ -579,11 +579,13 @@ export const setCarryOver = asyncHandler(async (req, res) => {
     task.id,
   ]);
 
+  const continuesOn = nextWorkingDayYmd(task.plan_day);
   res.json({
     message: wanted
-      ? "This task will continue on the next day."
+      ? `This task will continue on ${continuesOn}.`
       : "This task will not be carried over.",
     carry_over: wanted,
+    continues_on: continuesOn,
   });
 });
 
@@ -592,6 +594,10 @@ export const setCarryOver = asyncHandler(async (req, res) => {
 // Runs whenever plans are loaded, so it works even if nobody opens the page first thing.
 export async function materializeCarryOvers({ userId = null } = {}) {
   const today = getTodayYmd();
+  // No work on Saturday and Sunday: tasks that continue wait and show up on Monday.
+  if (isWeekendYmd(today)) {
+    return;
+  }
   const [due] = await getPool().query(
     `SELECT task.id, task.user_id, task.description, task.planned_time,
             (${UNFINISHED_SQL}) AS is_unfinished

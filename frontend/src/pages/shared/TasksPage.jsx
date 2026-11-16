@@ -25,10 +25,12 @@ import {
   ACCEPTED_FILE_TYPES,
   getUploadUrl,
   uploadMentionFiles,
+  submitFinalProduct,
   uploadReportFiles,
 } from "../../lib/uploads";
 import FilePicker from "../../components/FilePicker";
 import AttachmentLinks from "../../components/AttachmentLinks";
+import FinalProductFields from "../../components/FinalProductFields";
 
 const initialTaskForm = {
   job_id: "",
@@ -53,6 +55,8 @@ const initialReportForm = {
 const initialCompletionForm = {
   completion_note: "",
   files: [],
+  final_files: [],
+  reference_link: "",
 };
 
 function getDateInputValue(date = new Date()) {
@@ -77,6 +81,28 @@ function formatDate(value) {
     month: "short",
     year: "numeric",
   }).format(new Date(value));
+}
+
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+// Saturday and Sunday are not working days, so a task continues on the next working day.
+function getContinueDay(planYmd) {
+  const tomorrow = new Date(`${planYmd}T00:00:00Z`);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const next = new Date(tomorrow);
+  while (next.getUTCDay() === 0 || next.getUTCDay() === 6) {
+    next.setUTCDate(next.getUTCDate() + 1);
+  }
+  return {
+    skipsWeekend: next.getTime() !== tomorrow.getTime(),
+    tomorrowName: WEEKDAY_NAMES[tomorrow.getUTCDay()],
+    nextName: WEEKDAY_NAMES[next.getUTCDay()],
+    nextLabel: new Intl.DateTimeFormat("en-GB", {
+      day: "numeric",
+      month: "long",
+      timeZone: "UTC",
+    }).format(next),
+  };
 }
 
 export default function TasksPage() {
@@ -116,6 +142,8 @@ export default function TasksPage() {
   const [canEditPlanned, setCanEditPlanned] = useState(true);
   const [dayComments, setDayComments] = useState([]);
   const [reportFiles, setReportFiles] = useState([]);
+  const [finalFiles, setFinalFiles] = useState([]);
+  const [referenceLink, setReferenceLink] = useState("");
   const [mentionFiles, setMentionFiles] = useState([]);
   const [dayFiles, setDayFiles] = useState([]);
   const [isUploadingDayFile, setIsUploadingDayFile] = useState(false);
@@ -203,6 +231,17 @@ export default function TasksPage() {
   // Marks a task to continue on the next day (or removes the mark). Only possible while
   // the day is open, so the choice has to be made on the day itself.
   async function handleToggleCarryOver(task) {
+    if (!task.carry_over) {
+      const day = getContinueDay(plannedDate);
+      if (
+        day.skipsWeekend &&
+        !window.confirm(
+          `Tomorrow is ${day.tomorrowName}, and we do not work on weekends.\n\nContinue this task on ${day.nextName} ${day.nextLabel} instead?`
+        )
+      ) {
+        return;
+      }
+    }
     setError("");
     setSuccess("");
     setCarryingId(task.id);
@@ -357,11 +396,22 @@ export default function TasksPage() {
         })
       );
 
-      setSuccess(
-        completionForm.files.length
-          ? "Task completed and documents uploaded successfully."
-          : "Task completed successfully."
+      const finalProblems = await submitFinalProduct(
+        token,
+        { type: "task", id: completionTask.id },
+        completionForm.final_files,
+        completionForm.reference_link
       );
+
+      if (finalProblems.length) {
+        setError(`Task completed, but some files failed: ${finalProblems.join("; ")}`);
+      } else {
+        setSuccess(
+          completionForm.files.length || completionForm.final_files.length
+            ? "Task completed and documents uploaded successfully."
+            : "Task completed successfully."
+        );
+      }
       closeCompletionModal();
       loadPageData();
       loadReports(completionTask.id);
@@ -381,6 +431,8 @@ export default function TasksPage() {
     setIsReportModalOpen(false);
     setReportForm(initialReportForm);
     setReportFiles([]);
+    setFinalFiles([]);
+    setReferenceLink("");
     setMentionFiles([]);
     setIsReportSubmitting(false);
   }
@@ -818,6 +870,15 @@ export default function TasksPage() {
         } catch (uploadError) {
           uploadFailed = uploadError.message;
         }
+      }
+      const finalProblems = await submitFinalProduct(
+        token,
+        { type: "report", id: reportResponse.report.id },
+        finalFiles,
+        referenceLink
+      );
+      if (finalProblems.length) {
+        uploadFailed = [uploadFailed, ...finalProblems].filter(Boolean).join("; ");
       }
 
       setReportForm(initialReportForm);
@@ -1259,8 +1320,14 @@ export default function TasksPage() {
                                 }`}
                               >
                                 {task.carry_over
-                                  ? "Will continue tomorrow (click to undo)"
-                                  : "Continue tomorrow"}
+                                  ? `Will continue ${
+                                      getContinueDay(plannedDate).skipsWeekend
+                                        ? `on ${getContinueDay(plannedDate).nextName}`
+                                        : "tomorrow"
+                                    } (click to undo)`
+                                  : getContinueDay(plannedDate).skipsWeekend
+                                    ? `Continue on ${getContinueDay(plannedDate).nextName}`
+                                    : "Continue tomorrow"}
                               </button>
                             ) : task.carry_over ? (
                               <p className="mt-2 text-xs font-medium text-amber-700">
@@ -1746,6 +1813,17 @@ export default function TasksPage() {
                 </div>
               ) : null}
 
+              <FinalProductFields
+                files={completionForm.final_files}
+                onFilesChange={(final_files) =>
+                  setCompletionForm((current) => ({ ...current, final_files }))
+                }
+                link={completionForm.reference_link}
+                onLinkChange={(reference_link) =>
+                  setCompletionForm((current) => ({ ...current, reference_link }))
+                }
+              />
+
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
@@ -1923,6 +2001,13 @@ export default function TasksPage() {
               ) : null}
 
               <FilePicker files={reportFiles} onChange={setReportFiles} />
+
+              <FinalProductFields
+                files={finalFiles}
+                onFilesChange={setFinalFiles}
+                link={referenceLink}
+                onLinkChange={setReferenceLink}
+              />
 
               <div className="flex gap-3">
                 <button

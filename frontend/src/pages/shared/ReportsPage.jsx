@@ -4,7 +4,8 @@ import { AtSign, Download, Plus } from "lucide-react";
 import DashboardLayout from "../../components/DashboardLayout";
 import { useAuth } from "../../context/AuthContext";
 import { apiFetch } from "../../lib/api";
-import { uploadMentionFiles, uploadReportFiles } from "../../lib/uploads";
+import { submitFinalProduct, uploadMentionFiles, uploadReportFiles } from "../../lib/uploads";
+import FinalProductFields from "../../components/FinalProductFields";
 import FilePicker from "../../components/FilePicker";
 import AttachmentLinks from "../../components/AttachmentLinks";
 
@@ -54,6 +55,8 @@ export default function ReportsPage() {
   const [success, setSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [reportFiles, setReportFiles] = useState([]);
+  const [finalFiles, setFinalFiles] = useState([]);
+  const [referenceLink, setReferenceLink] = useState("");
   const [mentionFiles, setMentionFiles] = useState([]);
   const selectedTask = tasks.find((task) => String(task.id) === String(taskId));
 
@@ -160,8 +163,20 @@ export default function ReportsPage() {
         }
       }
 
+      const finalProblems = await submitFinalProduct(
+        token,
+        { type: "report", id: reportResponse.report.id },
+        finalFiles,
+        referenceLink
+      );
+      if (finalProblems.length) {
+        uploadFailed = [uploadFailed, ...finalProblems].filter(Boolean).join("; ");
+      }
+
       setReportForm(initialReportForm);
       setReportFiles([]);
+      setFinalFiles([]);
+      setReferenceLink("");
       setMentionFiles([]);
       if (uploadFailed || mentionUploadFailed) {
         setError(
@@ -388,6 +403,13 @@ export default function ReportsPage() {
             </label>
 
             <FilePicker files={reportFiles} onChange={setReportFiles} />
+
+            <FinalProductFields
+              files={finalFiles}
+              onFilesChange={setFinalFiles}
+              link={referenceLink}
+              onLinkChange={setReferenceLink}
+            />
 
             <div
               className={`app-panel rounded-2xl border p-4 transition ${

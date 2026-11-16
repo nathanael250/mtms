@@ -291,6 +291,25 @@ async function ensureMentionFilesSchema() {
   }
 }
 
+async function ensureStaffFilesSchema() {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS staff_files (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      file_name VARCHAR(255) NOT NULL,
+      drive_file_id VARCHAR(255) NOT NULL,
+      drive_url TEXT NOT NULL,
+      drive_folder_id VARCHAR(255) NULL,
+      mime_type VARCHAR(150) NULL,
+      file_size BIGINT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_staff_files_user (user_id),
+      CONSTRAINT fk_staff_files_user
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`
+  );
+}
+
 async function ensureDailyPlanFeedbackSchema() {
   await pool.query(
     `CREATE TABLE IF NOT EXISTS daily_task_comments (
@@ -377,6 +396,7 @@ export async function initializeDatabase() {
   await ensureDailyTaskSchema();
   await ensureReportTemplateSchema();
   await ensureDailyPlanFeedbackSchema();
+  await ensureStaffFilesSchema();
   await ensureMentionFilesSchema();
 
   if (env.seedAdminOnStart) {
