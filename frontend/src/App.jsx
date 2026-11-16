@@ -7,6 +7,7 @@ import JobsPage from "./pages/admin/JobsPage";
 import JobDetailPage from "./pages/admin/JobDetailPage";
 import WorkflowPage from "./pages/shared/WorkflowPage";
 import TasksPage from "./pages/shared/TasksPage";
+import JobEditPage from "./pages/admin/JobEditPage";
 import ReportsPage from "./pages/shared/ReportsPage";
 import MentionsPage from "./pages/shared/MentionsPage";
 import CommentsPage from "./pages/shared/CommentsPage";
@@ -53,6 +54,14 @@ export default function App() {
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
             <JobsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/jobs/:id/edit"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <JobEditPage />
           </ProtectedRoute>
         }
       />

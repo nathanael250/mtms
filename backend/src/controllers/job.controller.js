@@ -253,8 +253,15 @@ export const updateJob = asyncHandler(async (req, res) => {
     updates.push("status = ?");
     values.push(status);
   }
+  // The admin deleted the main document on the edit form.
+  const mainDocumentRemoved = String(req.body.remove_approval_document) === "true";
+  if (mainDocumentRemoved) {
+    updates.push("approval_document = NULL");
+  }
+  const currentMainDocument = mainDocumentRemoved ? null : existingJob.approval_document;
+
   let extraFiles = uploadedFiles;
-  if (uploadedFiles.length && !existingJob.approval_document) {
+  if (uploadedFiles.length && !currentMainDocument) {
     updates.push("approval_document = ?");
     values.push(relativePath(uploadedFiles[0]));
     extraFiles = uploadedFiles.slice(1);
@@ -283,9 +290,19 @@ export const updateJob = asyncHandler(async (req, res) => {
 });
 
 export const deleteJob = asyncHandler(async (req, res) => {
-  const [result] = await getPool().query("DELETE FROM jobs WHERE id = ?", [
-    req.params.id,
-  ]);
+  let result;
+  try {
+    [result] = await getPool().query("DELETE FROM jobs WHERE id = ?", [req.params.id]);
+  } catch (error) {
+    // Something (for example library documents) still points at this job.
+    if (error.errno === 1451) {
+      throw new ApiError(
+        409,
+        "This job still has linked records (such as library documents), so it cannot be deleted."
+      );
+    }
+    throw error;
+  }
   if (!result.affectedRows) {
     throw new ApiError(404, "Job not found.");
   }

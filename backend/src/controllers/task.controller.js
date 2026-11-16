@@ -273,3 +273,16 @@ export const completeTask = asyncHandler(async (req, res) => {
   res.json({ message: "Task completed successfully." });
 });
 
+
+export const deleteTask = asyncHandler(async (req, res) => {
+  const task = await getTaskOrThrow(req.params.id);
+  try {
+    await getPool().query("DELETE FROM tasks WHERE id = ?", [task.id]);
+  } catch (error) {
+    if (error.errno === 1451) {
+      throw new ApiError(409, "This task still has linked records, so it cannot be deleted.");
+    }
+    throw error;
+  }
+  res.json({ message: "Task deleted successfully." });
+});
