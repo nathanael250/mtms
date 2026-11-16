@@ -122,23 +122,22 @@ export default function JobsPage() {
         }
       }
 
-      await Promise.all(
-        validTaskAssignments.map((task) =>
-          apiFetch("/tasks", {
-            method: "POST",
-            token,
-            body: {
-              job_id: jobResponse.job.id,
-              title: task.title,
-              description: task.description,
-              assigned_by: user.id,
-              assigned_to: Number(task.assigned_to),
-              start_date: task.start_date || form.start_date || null,
-              due_date: task.due_date || form.end_date || null,
-            },
-          })
-        )
-      );
+      // One after the other, so the tasks keep their order and never lock each other.
+      for (const task of validTaskAssignments) {
+        await apiFetch("/tasks", {
+          method: "POST",
+          token,
+          body: {
+            job_id: jobResponse.job.id,
+            title: task.title,
+            description: task.description,
+            assigned_by: user.id,
+            assigned_to: Number(task.assigned_to),
+            start_date: task.start_date || form.start_date || null,
+            due_date: task.due_date || form.end_date || null,
+          },
+        });
+      }
 
       setForm(initialForm);
       setTaskAssignments([emptyTaskAssignment]);

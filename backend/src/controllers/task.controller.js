@@ -43,7 +43,9 @@ export const createTask = asyncHandler(async (req, res) => {
     await connection.beginTransaction();
 
     const [jobRows] = await connection.query(
-      "SELECT id, status, title FROM jobs WHERE id = ? LIMIT 1",
+      // FOR UPDATE: tasks created for the same job at the same time wait in line here
+      // instead of deadlocking when they both try to move the job to "ongoing".
+      "SELECT id, status, title FROM jobs WHERE id = ? LIMIT 1 FOR UPDATE",
       [job_id]
     );
     if (!jobRows.length) {
